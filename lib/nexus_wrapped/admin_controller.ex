@@ -288,7 +288,9 @@ defmodule NexusWrapped.AdminController do
     # get intercepted by Nexus's lightbox renderer and never produce a real <a> tag.
     # onclick is in the DOMPurify allowlist so this survives sanitisation.
     nav_script = "if(window._nexusNavigate){window._nexusNavigate('ext-route',window.NexusExtensions&&window.NexusExtensions.matchRoute('/wrapped/community/#{year}')||{});}else{window.location.href='#{wrapped_url}';}"
-    banner_html = "<a href=\"#{wrapped_url}\" onclick=\"#{nav_script}\"><img src=\"#{banner_url}\" alt=\"#{year} Community Wrapped\" width=\"680\"/></a>"
+    # Wrap in a <div> block — marked treats block-level HTML as raw passthrough,
+    # bypassing the link renderer that strips <a> tags wrapping images (lightbox logic).
+    banner_html = "<div><a href=\"#{wrapped_url}\" onclick=\"#{nav_script}\"><img src=\"#{banner_url}\" alt=\"#{year} Community Wrapped\" width=\"680\"/></a></div>"
 
     """
     #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. Every post, every reply, every reaction — it all adds up to something genuinely special. This community exists because of you. 🙏
