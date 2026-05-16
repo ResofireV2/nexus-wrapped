@@ -19,6 +19,7 @@ defmodule NexusWrapped do
     [
       NexusWrapped.Migrations.V20260515000001CreateResults,
       NexusWrapped.Migrations.V20260515000002CreateShares,
+      NexusWrapped.Migrations.V20260516000001CreateCommunityResults,
     ]
   end
 

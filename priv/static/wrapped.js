@@ -104,13 +104,322 @@
   function GenerationTab() {
     const currentYear = new Date().getFullYear();
     const [year, setYear]               = useState(String(currentYear));
-    const [status, setStatus]           = useState(null);   // {total_active, generated, pending, pct_complete}
+    const [status, setStatus]           = useState(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const [genLoading, setGenLoading]   = useState(false);
-    const [genResult, setGenResult]     = useState(null);   // {enqueued, year}
+    const [genResult, setGenResult]     = useState(null);
     const [genError, setGenError]       = useState(null);
     const [simLoading, setSimLoading]   = useState(false);
     const [simError, setSimError]       = useState(null);
+
+    // Community post state
+    const [spaces, setSpaces]               = useState([]);
+    const [selectedSpace, setSelectedSpace] = useState("");
+    const [communityStatus, setCommunityStatus] = useState(null);
+    const [communityLoading, setCommunityLoading] = useState(false);
+    const [communityError, setCommunityError]     = useState(null);
+    const [communityResult, setCommunityResult]   = useState(null);
+
+    const pollRef = useRef(null);
+
+    const loadStatus = useCallback(() => {
+      if (!year) return;
+      setStatusLoading(true);
+      apiFetch(`/admin/status/${year}`)
+        .then(d => { if (d.data) setStatus(d.data); })
+        .catch(() => {})
+        .finally(() => setStatusLoading(false));
+    }, [year]);
+
+    useEffect(() => { loadStatus(); }, [year, loadStatus]);
+
+    // Load spaces and community status on mount
+    useEffect(() => {
+      fetch("/api/v1/spaces", {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("nexus_token")}` }
+      })
+        .then(r => r.json())
+        .then(d => { if (d.spaces) setSpaces(d.spaces); })
+        .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+      if (!year) return;
+      apiFetch(`/admin/community_status?year=${year}`)
+        .then(d => { if (d.data) setCommunityStatus(d.data); })
+        .catch(() => {});
+    }, [year]);
+
+    useEffect(() => {
+      if (status && status.pending > 0 && !pollRef.current) {
+        pollRef.current = setInterval(loadStatus, 3000);
+      }
+      if (status && status.pending === 0 && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return () => {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      };
+    }, [status, loadStatus]);
+
+    const generateAll = () => {
+      setGenLoading(true); setGenError(null); setGenResult(null);
+      apiFetch("/admin/generate", { method: "POST", body: { year: Number(year) } })
+        .then(d => {
+          if (d.data) { setGenResult(d.data); loadStatus(); }
+          else setGenError(d.error || "Failed to enqueue generation");
+        })
+        .catch(() => setGenError("Network error"))
+        .finally(() => setGenLoading(false));
+    };
+
+    const simulate = () => {
+      setSimLoading(true); setSimError(null);
+      apiFetch("/admin/simulate", { method: "POST", body: { year: Number(year) } })
+        .then(d => {
+          if (d.data) { navToWrapped(d.data.year, d.data.username); }
+          else setSimError(d.error || "Simulation failed");
+        })
+        .catch(() => setSimError("Network error"))
+        .finally(() => setSimLoading(false));
+    };
+
+    const postCommunity = () => {
+      if (!selectedSpace) { setCommunityError("Select a space first"); return; }
+      setCommunityLoading(true); setCommunityError(null); setCommunityResult(null);
+      apiFetch("/admin/community_post", {
+        method: "POST",
+        body:   { year: Number(year), space_id: Number(selectedSpace) },
+      })
+        .then(d => {
+          if (d.data) {
+            setCommunityResult(d.data);
+            setCommunityStatus({ exists: true, post_id: d.data.post_id });
+          } else {
+            setCommunityError(d.error || "Failed to create post");
+          }
+        })
+        .catch(() => setCommunityError("Network error"))
+        .finally(() => setCommunityLoading(false));
+    };
+
+    const progressPct = status ? Math.min(100, status.pct_complete || 0) : 0;
+    const isRunning   = status && status.pending > 0;
+
+    return e("div", null,
+
+      // Year selector
+      e("div", { style: { marginBottom: 24 } },
+        e("label", {
+          style: { fontSize: 12, color: "var(--t4)", display: "block",
+                   marginBottom: 6, fontWeight: 500 },
+        }, "Year"),
+        e("input", {
+          type:      "number",
+          className: "fi",
+          value:     year,
+          onChange:  ev => setYear(ev.target.value),
+          style:     { maxWidth: 120 },
+          min:       2020,
+          max:       currentYear + 1,
+        })
+      ),
+
+      // Status card
+      status && e("div", {
+        style: {
+          background: "var(--s3)", border: "0.5px solid var(--b1)",
+          borderRadius: 10, padding: "14px 16px", marginBottom: 20,
+        },
+      },
+        e("div", {
+          style: { display: "flex", gap: 20, flexWrap: "wrap", marginBottom: isRunning ? 12 : 0 },
+        },
+          ...[
+            ["Total active users", status.total_active],
+            ["Generated",          status.generated],
+            ["Pending",            status.pending],
+          ].map(([label, val]) =>
+            e("div", { key: label },
+              e("div", { style: { fontSize: 20, fontWeight: 600, color: "var(--t1)", lineHeight: 1 } },
+                val ?? "—"),
+              e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 3 } }, label)
+            )
+          )
+        ),
+
+        isRunning && e("div", null,
+          e("div", {
+            style: { height: 4, borderRadius: 2, background: "var(--b1)", overflow: "hidden" },
+          },
+            e("div", {
+              style: {
+                height: "100%", borderRadius: 2, background: "var(--ac)",
+                width: `${progressPct}%`, transition: "width 0.4s ease",
+              },
+            })
+          ),
+          e("div", {
+            style: { fontSize: 11, color: "var(--t4)", marginTop: 5 },
+          }, `${progressPct}% complete — generating…`)
+        )
+      ),
+
+      // Action buttons — individual Wrappeds
+      e("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 } },
+        e("button", {
+          onClick:  generateAll,
+          disabled: genLoading || isRunning,
+          style: {
+            fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+            fontWeight: 500, cursor: (genLoading || isRunning) ? "default" : "pointer",
+            opacity: (genLoading || isRunning) ? 0.6 : 1,
+            background: "var(--ac)", border: "none", color: "var(--ac-on)",
+          },
+        },
+          e("i", { className: "fa-solid fa-wand-magic-sparkles", style: { marginRight: 7, fontSize: 12 } }),
+          genLoading ? "Enqueueing…" : isRunning ? "Running…" : "Generate all users"
+        ),
+
+        e("button", {
+          onClick:  simulate,
+          disabled: simLoading,
+          style: {
+            fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+            fontWeight: 500, cursor: simLoading ? "default" : "pointer",
+            opacity: simLoading ? 0.6 : 1,
+            background: "rgba(96,165,250,0.1)",
+            border: "0.5px solid rgba(96,165,250,0.35)",
+            color: "#60a5fa",
+          },
+        },
+          e("i", { className: "fa-solid fa-flask", style: { marginRight: 7, fontSize: 12 } }),
+          simLoading ? "Simulating…" : "Simulate for me"
+        ),
+
+        e("button", {
+          onClick:  loadStatus,
+          disabled: statusLoading,
+          style: {
+            fontSize: 13, padding: "8px 14px", borderRadius: 8, fontFamily: "inherit",
+            cursor: statusLoading ? "default" : "pointer",
+            opacity: statusLoading ? 0.5 : 1,
+            background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)",
+          },
+        },
+          e("i", {
+            className: `fa-solid fa-rotate${statusLoading ? " fa-spin" : ""}`,
+            style: { fontSize: 12 },
+          })
+        )
+      ),
+
+      genResult && e("div", {
+        style: { fontSize: 13, color: "var(--green)", marginBottom: 10,
+                 display: "flex", alignItems: "center", gap: 7 },
+      },
+        e("i", { className: "fa-solid fa-circle-check", style: { fontSize: 13 } }),
+        `Enqueued ${genResult.enqueued} generation jobs for ${genResult.year}`
+      ),
+
+      genError  && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, genError),
+      simError  && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, simError),
+
+      // ── Community Wrapped post ──────────────────────────────────────────
+      e("div", {
+        style: {
+          marginTop: 28, paddingTop: 24,
+          borderTop: "0.5px solid var(--b1)",
+        },
+      },
+        e("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--t2)", marginBottom: 4 } },
+          "Community Wrapped Post"
+        ),
+        e("div", { style: { fontSize: 12, color: "var(--t4)", marginBottom: 16, lineHeight: 1.6 } },
+          "Creates a pinned forum post with community-wide stats for the year — total posts, top contributors, most active spaces, and more."
+        ),
+
+        // Existing post status
+        communityStatus && communityStatus.exists && e("div", {
+          style: {
+            fontSize: 12, color: "var(--amber)", marginBottom: 12,
+            display: "flex", alignItems: "center", gap: 6,
+          },
+        },
+          e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 11 } }),
+          `A community post already exists for ${year}. Posting again will create a new one.`
+        ),
+
+        // Space picker + post button
+        e("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
+          e("select", {
+            className: "fi",
+            value:    selectedSpace,
+            onChange: ev => setSelectedSpace(ev.target.value),
+            style:    { maxWidth: 200, fontSize: 13 },
+          },
+            e("option", { value: "" }, "Select a space…"),
+            ...spaces.map(s =>
+              e("option", { key: s.id, value: s.id }, s.name)
+            )
+          ),
+          e("button", {
+            onClick:  postCommunity,
+            disabled: communityLoading || !selectedSpace,
+            style: {
+              fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+              fontWeight: 500,
+              cursor: (communityLoading || !selectedSpace) ? "default" : "pointer",
+              opacity: (communityLoading || !selectedSpace) ? 0.6 : 1,
+              background: "rgba(52,211,153,0.1)",
+              border: "0.5px solid rgba(52,211,153,0.35)",
+              color: "var(--green)",
+            },
+          },
+            e("i", { className: "fa-solid fa-paper-plane", style: { marginRight: 7, fontSize: 12 } }),
+            communityLoading ? "Posting…" : "Post Community Wrapped"
+          )
+        ),
+
+        communityResult && e("div", {
+          style: { fontSize: 13, color: "var(--green)", marginTop: 10,
+                   display: "flex", alignItems: "center", gap: 7 },
+        },
+          e("i", { className: "fa-solid fa-circle-check", style: { fontSize: 13 } }),
+          `Posted! `,
+          e("a", {
+            href:    `/posts/${communityResult.post_id}`,
+            style:   { color: "var(--ac-text)", textDecoration: "none" },
+            onClick: ev => {
+              ev.preventDefault();
+              if (window._nexusNavigate) window._nexusNavigate("post", { id: communityResult.post_id });
+            },
+          }, "View post →")
+        ),
+
+        communityError && e("div", {
+          style: { fontSize: 13, color: "var(--red)", marginTop: 10 },
+        }, communityError)
+      ),
+
+      // Explanation
+      e("div", {
+        style: {
+          fontSize: 12, color: "var(--t5)", lineHeight: 1.7,
+          borderTop: "0.5px solid var(--b1)", paddingTop: 16, marginTop: 24,
+        },
+      },
+        e("strong", { style: { color: "var(--t4)" } }, "Generate all users"),
+        " enqueues one background job per active user for the selected year. " +
+        "Jobs run via Oban — progress updates every few seconds.",
+        e("br"),
+        e("strong", { style: { color: "var(--t4)" } }, "Simulate for me"),
+        " runs the full generation pipeline for your account synchronously and " +
+        "opens your Wrapped immediately so you can preview the result."
+      )
+    );
+  }
 
     // Poll generation status when a batch is running
     const pollRef = useRef(null);
@@ -318,22 +627,6 @@
 
       // Explanation
       e("div", {
-        style: {
-          fontSize: 12, color: "var(--t5)", lineHeight: 1.7,
-          borderTop: "0.5px solid var(--b1)", paddingTop: 16, marginTop: 8,
-        },
-      },
-        e("strong", { style: { color: "var(--t4)" } }, "Generate all users"),
-        " enqueues one background job per active user for the selected year. " +
-        "Jobs run via Oban — progress updates every few seconds.",
-        e("br"),
-        e("strong", { style: { color: "var(--t4)" } }, "Simulate for me"),
-        " runs the full generation pipeline for your account synchronously and " +
-        "opens your Wrapped immediately so you can preview the result."
-      )
-    );
-  }
-
   // ── Admin panel root ──────────────────────────────────────────────────────
   // Renders a tab shell matching TabbedPanel's visual style exactly.
   // Generation tab: custom JSX above.

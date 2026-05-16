@@ -150,9 +150,131 @@ defmodule NexusWrapped.AdminController do
                         error: "Could not load status — check that migrations ran correctly"}})
   end
 
+  # ── POST /admin/community_post — generate community stats & post to forum ──
+
+  def community_post(conn, params) do
+    admin  = conn.assigns.current_user
+    year   = parse_year(params["year"])
+    ext    = Nexus.Extensions.get_extension_by_slug("wrapped")
+    settings = if ext, do: ext.settings || %{}, else: %{}
+
+    space_id = parse_space_id(params["space_id"] || settings["community_post_space_id"])
+
+    if is_nil(space_id) do
+      conn |> put_status(400) |> json(%{error: "space_id is required"})
+    else
+      data = NexusWrapped.Generator.generate_community(year, settings)
+
+      # Build the markdown post body
+      body = build_community_post_body(data, year)
+      title = "#{year} Community Wrapped 🎉"
+
+      case Nexus.Forum.create_post(
+        %{"title" => title, "body" => body, "space_id" => space_id},
+        admin,
+        []
+      ) do
+        {:ok, post} ->
+          # Pin it to the space
+          Nexus.Forum.pin_post(post, true, "space")
+
+          # Persist the community result
+          now = DateTime.utc_now() |> DateTime.truncate(:second)
+          case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
+            nil ->
+              %NexusWrapped.CommunityResult{}
+              |> NexusWrapped.CommunityResult.changeset(%{year: year, data: data, post_id: post.id, generated_at: now})
+              |> Repo.insert()
+            existing ->
+              existing
+              |> NexusWrapped.CommunityResult.changeset(%{data: data, post_id: post.id, generated_at: now})
+              |> Repo.update()
+          end
+
+          json(conn, %{data: %{post_id: post.id, title: post.title, year: year}})
+
+        {:error, changeset} ->
+          errors = Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
+          conn |> put_status(422) |> json(%{error: "Failed to create post", details: errors})
+      end
+    end
+  end
+
+  # ── GET /admin/community_status — check if a community post exists ─────────
+
+  def community_status(conn, params) do
+    year = parse_year(params["year"])
+    result = Repo.get_by(NexusWrapped.CommunityResult, year: year)
+
+    json(conn, %{
+      data: %{
+        year:        year,
+        exists:      !is_nil(result),
+        post_id:     result && result.post_id,
+        generated_at: result && DateTime.to_iso8601(result.generated_at),
+      }
+    })
+  end
+
   # ── Helpers ───────────────────────────────────────────────────────────────
 
-  defp parse_year(nil),     do: Date.utc_today().year
+  defp parse_space_id(nil), do: nil
+  defp parse_space_id(id) when is_integer(id), do: id
+  defp parse_space_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} -> n
+      _       -> nil
+    end
+  end
+
+  defp build_community_post_body(data, year) do
+    top_posters = data["top_posters"] || []
+    top_spaces  = data["top_spaces"]  || []
+    discussed   = data["most_discussed"]
+
+    poster_lines = top_posters
+      |> Enum.with_index(1)
+      |> Enum.map(fn {p, i} -> "#{i}. **@#{p["username"]}** — #{p["post_count"]} posts" end)
+      |> Enum.join("\n")
+
+    space_lines = top_spaces
+      |> Enum.map(fn s -> "- **#{s["name"]}** — #{s["post_count"]} posts" end)
+      |> Enum.join("\n")
+
+    discussed_line = if discussed do
+      "\n## 🏆 Most Discussed Thread\n[#{discussed["title"]}](/posts/#{discussed["id"]}) — #{discussed["reply_count"]} replies\n"
+    else
+      ""
+    end
+
+    """
+    # #{year} in Review 🎊
+
+    What a year it's been! Here's how our community did in #{year}.
+
+    ## 📊 By the Numbers
+
+    | Stat | Count |
+    |------|-------|
+    | Total posts | #{data["total_posts"]} |
+    | Total replies | #{data["total_replies"]} |
+    | Reactions given | #{data["total_reactions"]} |
+    | New members | #{data["new_members"]} |
+    | Active members | #{data["active_members"]} |
+
+    ## 🌟 Top Contributors
+
+    #{poster_lines}
+
+    ## 🏠 Most Active Spaces
+
+    #{space_lines}
+    #{discussed_line}
+    ---
+    *Individual Wrappeds are available on each member's profile — check yours in the Wrapped tab!*
+    """
+    |> String.trim()
+  end
   defp parse_year(y) when is_integer(y), do: y
   defp parse_year(y) when is_binary(y),  do: String.to_integer(y)
 

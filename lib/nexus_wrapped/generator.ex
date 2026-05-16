@@ -778,6 +778,163 @@ defmodule NexusWrapped.Generator do
   defp match_rank(nil, _), do: false
   defp match_rank(rank, threshold), do: rank <= threshold
 
+  # ── Community stats ───────────────────────────────────────────────────────
+
+  def generate_community(year, settings \\ %{}) do
+    from_date = Date.new!(year, 1, 1)
+    to_date   = Date.new!(year, 12, 31)
+
+    # Forum-wide totals for the year
+    total_posts =
+      Repo.aggregate(
+        from(p in "posts",
+          where: p.hidden == false
+            and fragment("?::date", p.inserted_at) >= ^from_date
+            and fragment("?::date", p.inserted_at) <= ^to_date
+        ), :count
+      ) || 0
+
+    total_replies =
+      Repo.aggregate(
+        from(r in "replies",
+          where: r.hidden == false
+            and fragment("?::date", r.inserted_at) >= ^from_date
+            and fragment("?::date", r.inserted_at) <= ^to_date
+        ), :count
+      ) || 0
+
+    # New members joined this year
+    new_members =
+      Repo.aggregate(
+        from(u in "users",
+          where: fragment("?::date", u.inserted_at) >= ^from_date
+            and fragment("?::date", u.inserted_at) <= ^to_date
+        ), :count
+      ) || 0
+
+    # Active members (posted at least once)
+    active_members =
+      Repo.one(
+        from p in "posts",
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        select: count(p.user_id, :distinct)
+      ) || 0
+
+    # Top posters
+    top_posters =
+      Repo.all(
+        from p in "posts",
+        join: u in "users", on: u.id == p.user_id,
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        group_by: [u.id, u.username, u.avatar_url, u.avatar_color],
+        order_by: [desc: count(p.id)],
+        limit: 5,
+        select: %{
+          user_id:      u.id,
+          username:     u.username,
+          avatar_url:   u.avatar_url,
+          avatar_color: u.avatar_color,
+          post_count:   count(p.id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # Most active space
+    top_spaces =
+      Repo.all(
+        from p in "posts",
+        join: s in "spaces", on: s.id == p.space_id,
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        group_by: [s.id, s.name, s.slug],
+        order_by: [desc: count(p.id)],
+        limit: 3,
+        select: %{
+          space_id:   s.id,
+          name:       s.name,
+          slug:       s.slug,
+          post_count: count(p.id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # Most reacted post of the year
+    most_reacted_post =
+      Repo.one(
+        from p in "posts",
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        order_by: [desc: p.reply_count],
+        limit: 1,
+        select: %{id: p.id, title: p.title, reply_count: p.reply_count, user_id: p.user_id}
+      )
+      |> then(fn p -> if p, do: stringify_map(p), else: nil end)
+
+    # Total reactions forum-wide
+    total_reactions =
+      Repo.aggregate(
+        from(r in "reactions",
+          where: fragment("?::date", r.inserted_at) >= ^from_date
+            and fragment("?::date", r.inserted_at) <= ^to_date
+        ), :count
+      ) || 0
+
+    # Most discussed thread (most replies)
+    most_discussed =
+      Repo.one(
+        from p in "posts",
+        join: u in "users", on: u.id == p.user_id,
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        order_by: [desc: p.reply_count],
+        limit: 1,
+        select: %{
+          id:          p.id,
+          title:       p.title,
+          reply_count: p.reply_count,
+          username:    u.username,
+        }
+      )
+      |> then(fn p -> if p, do: stringify_map(p), else: nil end)
+
+    # Posts per month breakdown
+    posts_per_month =
+      Repo.all(
+        from p in "posts",
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        group_by: fragment("date_part('month', ?)", p.inserted_at),
+        select: {
+          fragment("date_part('month', ?)::int", p.inserted_at),
+          count(p.id)
+        }
+      )
+      |> Enum.into(%{})
+      |> then(fn m -> Enum.map(1..12, fn month -> Map.get(m, month, 0) end) end)
+
+    %{
+      "year"              => year,
+      "total_posts"       => total_posts,
+      "total_replies"     => total_replies,
+      "new_members"       => new_members,
+      "active_members"    => active_members,
+      "total_reactions"   => total_reactions,
+      "top_posters"       => top_posters,
+      "top_spaces"        => top_spaces,
+      "most_discussed"    => most_discussed,
+      "most_reacted_post" => most_reacted_post,
+      "posts_per_month"   => posts_per_month,
+    }
+  end
+
   # ── Helpers ───────────────────────────────────────────────────────────────
 
   defp stringify_map(map) when is_map(map) do

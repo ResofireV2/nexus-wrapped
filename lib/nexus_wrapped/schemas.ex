@@ -36,3 +36,23 @@ defmodule NexusWrapped.Share do
     |> validate_required([:user_id, :year])
   end
 end
+
+defmodule NexusWrapped.CommunityResult do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  schema "wrapped_community_results" do
+    field :year,         :integer
+    field :data,         :map,     default: %{}
+    field :post_id,      :integer
+    field :generated_at, :utc_datetime
+
+    timestamps(type: :utc_datetime)
+  end
+
+  def changeset(result, attrs) do
+    result
+    |> cast(attrs, [:year, :data, :post_id, :generated_at])
+    |> validate_required([:year, :data, :generated_at])
+  end
+end
