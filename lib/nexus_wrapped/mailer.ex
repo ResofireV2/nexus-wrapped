@@ -103,9 +103,9 @@ defmodule NexusWrapped.Mailer do
 
     logo_html =
       if absolute_logo do
-        """<img src="#{absolute_logo}" alt="#{site_name}" style="max-height:40px;max-width:160px;object-fit:contain;display:block;" />"""
+        "<img src=\"#{absolute_logo}\" alt=\"#{site_name}\" style=\"max-height:40px;max-width:160px;object-fit:contain;display:block;\" />"
       else
-        """<span style="font-size:22px;font-weight:600;color:#f0eeff;letter-spacing:-0.5px;">#{site_name}</span>"""
+        "<span style=\"font-size:22px;font-weight:600;color:#f0eeff;letter-spacing:-0.5px;\">#{site_name}</span>"
       end
 
     """
