@@ -80,8 +80,8 @@
 
   function navToWrapped(year, username) {
     const match = NE.matchRoute(`/wrapped/${year}/${username}`);
-    if (window._nexusNavigate) {
-      window._nexusNavigate("ext-route", match || {});
+    if (window._nexusNavigate && match) {
+      window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
     }
   }
 
@@ -704,7 +704,7 @@
   function WrappedLandingPage({ currentUser, navigate }) {
     useEffect(() => {
       if (currentUser && currentUser.username) {
-        navigate("profile", { username: currentUser.username, initialTab: "wrapped" });
+        navigate("profile", { username: currentUser.username, tab: "wrapped" });
       }
     }, []);
     return e("div", {
@@ -754,7 +754,7 @@
     label:    "Wrapped",
     icon:     "fa-wand-sparkles",
     page:     "ext-route",
-    props:    NE.matchRoute("/wrapped") || {},
+    props:    { _match: NE.matchRoute("/wrapped") },
     authOnly: true,
     priority: 60,
   });
