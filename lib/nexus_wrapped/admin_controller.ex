@@ -51,6 +51,13 @@ defmodule NexusWrapped.AdminController do
       {:ok, result} ->
         share = Repo.get_by(NexusWrapped.Share, user_id: admin.id, year: year)
 
+        # Fire the notification so admins can see how it looks during testing
+        Nexus.Notifications.notify_extension(
+          admin.id,
+          "wrapped_ready",
+          data: %{"year" => year, "username" => admin.username}
+        )
+
         json(conn, %{
           data: %{
             year:      year,
