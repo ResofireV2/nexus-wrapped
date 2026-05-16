@@ -51,7 +51,15 @@ defmodule NexusWrapped.AdminController do
       {:ok, result} ->
         share = Repo.get_by(NexusWrapped.Share, user_id: admin.id, year: year)
 
-        # Fire the notification so admins can see how it looks during testing
+        # Delete any existing wrapped_ready notification for this user+year
+        # so the idempotency check in DeliverNotification doesn't swallow it.
+        Repo.delete_all(
+          from n in "notifications",
+          where: n.user_id == ^admin.id
+            and n.type == "extension"
+            and fragment("(?->>'ext_type')", n.data) == "wrapped_ready"
+        )
+
         Nexus.Notifications.notify_extension(
           admin.id,
           "wrapped_ready",
