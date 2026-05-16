@@ -343,6 +343,7 @@ defmodule NexusWrapped.AdminController do
     end
   end
   defp yoy_teaser(_, _, _, _), do: nil
+  defp parse_year(nil),     do: Date.utc_today().year
   defp parse_year(y) when is_integer(y), do: y
   defp parse_year(y) when is_binary(y),  do: String.to_integer(y)
 

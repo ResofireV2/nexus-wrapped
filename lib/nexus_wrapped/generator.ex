@@ -971,7 +971,6 @@ defmodule NexusWrapped.Generator do
       {key, val}
     end)
   end
-end
 
   # ── Community banner SVG ──────────────────────────────────────────────────
 
@@ -981,12 +980,9 @@ end
     {name_size, name_spacing} = name_font_params(forum_name)
 
     # Compute percentage change labels from YoY data
-    posts_label    = yoy_label(data["total_posts"],   data["prev_total_posts"])
-    members_label  = yoy_label(data["active_members"], data["prev_active_members"])
+    posts_label     = yoy_label(data["total_posts"],    data["prev_total_posts"])
+    members_label   = yoy_label(data["active_members"], data["prev_active_members"])
     reactions_label = format_count(data["total_reactions"] || 0)
-
-    posts_val    = format_count(data["total_posts"]    || 0)
-    members_val  = format_count(data["active_members"] || 0)
 
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="680" height="280" viewBox="0 0 680 280">
@@ -1110,3 +1106,4 @@ end
   defp format_count(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
   defp format_count(n) when n >= 1_000,     do: "#{Float.round(n / 1_000, 1)}K"
   defp format_count(n),                     do: Integer.to_string(n)
+end

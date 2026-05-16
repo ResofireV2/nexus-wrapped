@@ -145,7 +145,7 @@
 
     useEffect(() => {
       if (!year) return;
-      apiFetch(`/admin/community_status?year=${year}`)
+      apiFetch(`/admin/community_status/${year}`)
         .then(d => { if (d.data) setCommunityStatus(d.data); })
         .catch(() => {});
     }, [year]);

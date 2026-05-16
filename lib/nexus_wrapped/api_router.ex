@@ -29,7 +29,7 @@ defmodule NexusWrapped.ApiRouter do
     post "/simulate",          NexusWrapped.AdminController, :simulate
     get  "/status/:year",      NexusWrapped.AdminController, :generation_status
     post "/community_post",    NexusWrapped.AdminController, :community_post
-    get  "/community_status",  NexusWrapped.AdminController, :community_status
+    get  "/community_status/:year", NexusWrapped.AdminController, :community_status
   end
 
   # ── Authenticated routes ──────────────────────────────────────────────────
