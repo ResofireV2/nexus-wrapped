@@ -1,0 +1,38 @@
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+<rect width="800" height="400" fill="#0d0d14"/>
+<rect x="30" y="44" width="8" height="22" rx="4" fill="#a78bfa" opacity="0.85" transform="rotate(-18 34 55)"/>
+<rect x="748" y="36" width="8" height="22" rx="4" fill="#f472b6" opacity="0.85" transform="rotate(22 752 47)"/>
+<rect x="768" y="158" width="8" height="22" rx="4" fill="#34d399" opacity="0.75" transform="rotate(40 772 169)"/>
+<rect x="20" y="308" width="8" height="22" rx="4" fill="#60a5fa" opacity="0.75" transform="rotate(-30 24 319)"/>
+<rect x="752" y="318" width="8" height="22" rx="4" fill="#fbbf24" opacity="0.75" transform="rotate(15 756 329)"/>
+<rect x="66" y="138" width="8" height="22" rx="4" fill="#f472b6" opacity="0.7" transform="rotate(-45 70 149)"/>
+<rect x="730" y="238" width="8" height="22" rx="4" fill="#a78bfa" opacity="0.7" transform="rotate(35 734 249)"/>
+<rect x="108" y="328" width="8" height="22" rx="4" fill="#34d399" opacity="0.7" transform="rotate(12 112 339)"/>
+<rect x="672" y="58" width="8" height="22" rx="4" fill="#60a5fa" opacity="0.7" transform="rotate(-25 676 69)"/>
+<rect x="44" y="200" width="7" height="18" rx="3.5" fill="#fbbf24" opacity="0.65" transform="rotate(55 47 209)"/>
+<rect x="756" y="88" width="7" height="18" rx="3.5" fill="#f472b6" opacity="0.65" transform="rotate(-40 760 97)"/>
+<rect x="160" y="28" width="7" height="18" rx="3.5" fill="#60a5fa" opacity="0.7" transform="rotate(-12 163 37)"/>
+<rect x="630" y="24" width="7" height="18" rx="3.5" fill="#a78bfa" opacity="0.7" transform="rotate(18 633 33)"/>
+<rect x="24" y="370" width="7" height="18" rx="3.5" fill="#34d399" opacity="0.6" transform="rotate(-8 27 379)"/>
+<rect x="770" y="350" width="7" height="18" rx="3.5" fill="#fbbf24" opacity="0.6" transform="rotate(30 773 359)"/>
+<rect x="86" y="360" width="7" height="18" rx="3.5" fill="#f472b6" opacity="0.6" transform="rotate(22 89 369)"/>
+<rect x="706" y="354" width="7" height="18" rx="3.5" fill="#60a5fa" opacity="0.6" transform="rotate(-18 709 363)"/>
+<rect x="240" y="22" width="6" height="16" rx="3" fill="#fbbf24" opacity="0.65" transform="rotate(8 243 30)"/>
+<rect x="550" y="18" width="6" height="16" rx="3" fill="#34d399" opacity="0.65" transform="rotate(-14 553 26)"/>
+<rect x="48" y="266" width="6" height="16" rx="3" fill="#a78bfa" opacity="0.55" transform="rotate(-60 51 274)"/>
+<rect x="746" y="270" width="6" height="16" rx="3" fill="#f472b6" opacity="0.55" transform="rotate(50 749 278)"/>
+<rect x="340" y="14" width="6" height="16" rx="3" fill="#60a5fa" opacity="0.6" transform="rotate(-5 343 22)"/>
+<rect x="456" y="12" width="6" height="16" rx="3" fill="#a78bfa" opacity="0.6" transform="rotate(10 459 20)"/>
+<rect x="138" y="372" width="6" height="16" rx="3" fill="#fbbf24" opacity="0.55" transform="rotate(35 141 380)"/>
+<rect x="650" y="368" width="6" height="16" rx="3" fill="#34d399" opacity="0.55" transform="rotate(-30 653 376)"/>
+<rect x="770" y="200" width="5" height="13" rx="2.5" fill="#a78bfa" opacity="0.5" transform="rotate(65 772 206)"/>
+<rect x="24" y="80" width="5" height="13" rx="2.5" fill="#34d399" opacity="0.5" transform="rotate(-50 27 86)"/>
+<rect x="776" y="300" width="5" height="13" rx="2.5" fill="#fbbf24" opacity="0.5" transform="rotate(25 779 306)"/>
+<rect x="18" y="180" width="5" height="13" rx="2.5" fill="#f472b6" opacity="0.5" transform="rotate(40 21 186)"/>
+<rect x="400" y="8" width="5" height="13" rx="2.5" fill="#f472b6" opacity="0.55" transform="rotate(-3 403 14)"/>
+<rect x="196" y="378" width="5" height="13" rx="2.5" fill="#60a5fa" opacity="0.5" transform="rotate(18 199 385)"/>
+<rect x="598" y="376" width="5" height="13" rx="2.5" fill="#a78bfa" opacity="0.5" transform="rotate(-22 601 383)"/>
+<text x="400" y="192" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="72" font-weight="700" letter-spacing="-3" fill="#f0eeff">Wrapped</text>
+<text x="400" y="238" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="400" fill="#8b7ab8" letter-spacing="0.2">Your year in review</text>
+<text x="400" y="366" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="13" fill="#3a2e58" letter-spacing="1">An Official Nexus Extension</text>
+</svg>
