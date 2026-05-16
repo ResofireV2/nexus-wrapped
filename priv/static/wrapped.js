@@ -1088,7 +1088,22 @@
   }
 
   // ── Slide 6: Finale ───────────────────────────────────────────────────────
-  function SlideFinale({ d, username, year, navigate }) {
+  function SlideFinale({ d, username, year, navigate, isShared, onShareToggle }) {
+    const [sharing, setSharing] = useState(false);
+    const [shared,  setShared]  = useState(isShared || false);
+
+    const toggleShare = () => {
+      setSharing(true);
+      apiFetch(`/${year}/share`, { method: "PATCH" })
+        .then(res => {
+          if (res.data) {
+            setShared(res.data.shared);
+            if (onShareToggle) onShareToggle(res.data.shared);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSharing(false));
+    };
     return e(Slide, null,
       e(ConfettiBurst, { active: true }),
       e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.05s" } },
@@ -1138,17 +1153,17 @@
           },
         }, "View my profile"),
         e("button", {
-          onClick: () => {
-            if (navigator.share) {
-              navigator.share({ title: `${username}'s ${year} Wrapped`, url: window.location.href });
-            }
-          },
+          onClick: toggleShare,
+          disabled: sharing,
           style: {
             padding: "10px 22px", borderRadius: 24,
-            background: "none", border: "0.5px solid var(--b2)",
-            color: "var(--t2)", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+            background: shared ? "var(--s2)" : "none",
+            border: shared ? "0.5px solid var(--b2)" : "0.5px solid var(--b2)",
+            color: shared ? "var(--ac-text)" : "var(--t3)",
+            fontSize: 13, cursor: sharing ? "default" : "pointer",
+            fontFamily: "inherit", opacity: sharing ? 0.6 : 1,
           },
-        }, "Share")
+        }, sharing ? "…" : shared ? "✓ Shared publicly" : "Make public")
       )
     );
   }
@@ -1248,12 +1263,15 @@
       e(SlideReactions,   { key: `3-${key}`, d }),
       e(SlideSpaces,      { key: `4-${key}`, d }),
       e(SlideRank,        { key: `5-${key}`, d }),
-      e(SlideFinale,      { key: `6-${key}`, d, username, year, navigate }),
+      e(SlideFinale,      { key: `6-${key}`, d, username, year, navigate, isShared: state.data.is_shared }),
     ];
 
     // Conditionally add Gamepedia slide if available
-    if (d.gamepedia_available && d.gamepedia_count > 0) {
-      slides.splice(5, 0, e(SlideGamepedia, { key: `gp-${key}`, d }));
+    if (d.gamepedia_available) {
+      slides.splice(5, 0,
+        e(SlideGamelog,       { key: `gp1-${key}`, d }),
+        e(SlideGameDiscussed, { key: `gp2-${key}`, d })
+      );
     }
 
     return e("div", {
@@ -1269,45 +1287,120 @@
     );
   }
 
-  // ── Optional Gamepedia slide ──────────────────────────────────────────────
-  function SlideGamepedia({ d }) {
-    const games    = (d.gamepedia_games || []).slice(0, 6);
-    const topGenre = d.gamepedia_top_genre;
-    const topRated = d.gamepedia_top_rated;
+  // ── Slide: Gamelog ────────────────────────────────────────────────────────
+  function SlideGamelog({ d }) {
+    const games       = (d.gamepedia_games || []).slice(0, 9);
+    const topGenre    = d.gamepedia_top_genre;
+    const topRated    = d.gamepedia_top_rated;
+    const nowPlaying  = d.gamepedia_now_playing;
+    const count       = d.gamepedia_count || 0;
 
     return e(Slide, null,
       e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
-        "your games"
+        "your gamelog"
       ),
       e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--green)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.1s" } },
-        e(AnimCounter, { target: d.gamepedia_count || 0, duration: 1000, delay: 200 })
+        e(AnimCounter, { target: count, duration: 1000, delay: 200 })
       ),
       e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.3s" } },
-        "games logged this year"
+        count === 1 ? "game in your library" : "games in your library"
       ),
-      topGenre && e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.4s" } },
-        `your top genre: `, e("span", { style: { color: "var(--ac-text)" } }, topGenre)
+      e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", gap: 12, marginTop: 20, justifyContent: "center", flexWrap: "wrap", animationDelay: "0.4s" },
+      },
+        nowPlaying && e("div", { style: { fontSize: 12, color: "var(--green)", display: "flex", alignItems: "center", gap: 5 } },
+          e("i", { className: "fa-solid fa-circle-play", style: { fontSize: 11 } }),
+          `Now playing: ${nowPlaying.name}`
+        ),
+        topGenre && e("div", { style: { fontSize: 12, color: "var(--t4)" } },
+          `Top genre: `, e("span", { style: { color: "var(--ac-text)" } }, topGenre)
+        ),
+        topRated && e("div", { style: { fontSize: 12, color: "var(--t4)" } },
+          `Top rated: `, e("span", { style: { color: "var(--amber)" } },
+            topRated.name, e("span", { style: { color: "var(--t5)" } }, ` · ${topRated.rating}/10`)
+          )
+        ),
       ),
       games.length > 0 && e("div", {
         className: "wr-fade-up",
         style: {
           display: "flex", flexWrap: "wrap", gap: 8,
-          justifyContent: "center", marginTop: 28, maxWidth: 380,
-          animationDelay: "0.5s",
+          justifyContent: "center", marginTop: 24, maxWidth: 380,
+          animationDelay: "0.55s",
         },
       },
         ...games.map((g, i) =>
           e("div", {
-            key: g.game_id || i,
+            key: g.id || i,
             className: "wr-pill-pop",
             style: {
               padding: "6px 12px", borderRadius: 8,
               background: "var(--s2)", border: "0.5px solid var(--b1)",
               fontSize: 12, color: "var(--t2)",
-              animationDelay: `${0.55 + i * 0.06}s`,
+              animationDelay: `${0.6 + i * 0.05}s`,
             },
-          }, g.game_name || "")
+          }, g.name || "")
         )
+      ),
+      count === 0 && e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 16, animationDelay: "0.4s" } },
+        "Add games to your library on Gamepedia"
+      )
+    );
+  }
+
+  // ── Slide: Most Discussed Games ───────────────────────────────────────────
+  function SlideGameDiscussed({ d }) {
+    // gamepedia_most_discussed = site-wide top games by post count
+    // gamepedia_user_discussed = games the user specifically posted about most
+    const userTop  = (d.gamepedia_user_discussed  || []).slice(0, 5);
+    const siteTop  = (d.gamepedia_most_discussed   || []).slice(0, 5);
+    const hasUser  = userTop.length > 0;
+    const BAR_COLORS = ["var(--ac)", "var(--pink)", "var(--green)", "var(--blue)", "var(--amber)"];
+    const list     = hasUser ? userTop : siteTop;
+    const maxCount = list.length > 0 ? list[0].post_count || 1 : 1;
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        hasUser ? "games you talked about" : "most discussed games"
+      ),
+      list.length > 0
+        ? e("div", { style: { width: "100%", maxWidth: 400, marginTop: 8 } },
+            ...list.map((g, i) =>
+              e("div", {
+                key: g.id || i,
+                className: "wr-fade-up",
+                style: {
+                  display: "flex", alignItems: "center", gap: 12,
+                  marginBottom: 14, animationDelay: `${0.1 + i * 0.1}s`,
+                },
+              },
+                e("div", { style: { width: 22, fontSize: 16, fontWeight: 700, color: i === 0 ? "var(--ac)" : "var(--t4)", textAlign: "center", flexShrink: 0 } },
+                  `${i + 1}`
+                ),
+                e("div", { style: { flex: 1, minWidth: 0 } },
+                  e("div", { style: { fontSize: 14, color: "var(--t1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                    g.name || ""
+                  ),
+                  e("div", { style: { height: 4, background: "var(--s3)", borderRadius: 2, marginTop: 4, overflow: "hidden" } },
+                    e(AnimBar, {
+                      pct:   Math.round((g.post_count || 0) / maxCount * 100),
+                      color: BAR_COLORS[i],
+                      delay: 200 + i * 100,
+                    })
+                  )
+                ),
+                e("div", { style: { fontSize: 12, color: "var(--t4)", flexShrink: 0, width: 48, textAlign: "right" } },
+                  `${g.post_count || 0} ${(g.post_count || 0) === 1 ? "post" : "posts"}`
+                )
+              )
+            )
+          )
+        : e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t4)", marginTop: 24 } },
+            "No game-linked posts yet"
+          ),
+      !hasUser && siteTop.length > 0 && e("div", { className: "wr-fade-up", style: { fontSize: 11, color: "var(--t5)", marginTop: 20, animationDelay: "0.6s" } },
+        "across the whole forum"
       )
     );
   }

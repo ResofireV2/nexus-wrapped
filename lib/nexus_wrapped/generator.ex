@@ -557,55 +557,119 @@ defmodule NexusWrapped.Generator do
     _ -> false
   end
 
-  defp collect_gamepedia_stats(user_id, year) do
-    from_date = Date.new!(year, 1, 1)
-    to_date   = Date.new!(year, 12, 31)
+  defp collect_gamepedia_stats(user_id, _year) do
+    # ── Gamelog: games this user has added (all time) ──────────────────────
+    # gamepedia_gamelogs: user_id, game_id, is_playing, inserted_at
+    # gamepedia_games:    id, name, slug, cover_image_url, first_release_date, developer
+    # gamepedia_ratings:  user_id, game_id, rating (separate table)
+    # gamepedia_game_genre + gamepedia_genres: genre join
 
-    # Query the Gamepedia game_logs table directly by name.
-    # Column names mirror what Gamepedia's migration creates:
-    # user_id, game_id, game_name, game_slug, cover_url, status, genre, rating, inserted_at
-    games =
+    gamelog_games =
       Repo.all(
-        from gl in "gamepedia_game_logs",
-        where: gl.user_id == ^user_id
-          and fragment("?::date", gl.inserted_at) >= ^from_date
-          and fragment("?::date", gl.inserted_at) <= ^to_date,
+        from gl in "gamepedia_gamelogs",
+        join: g in "gamepedia_games", on: g.id == gl.game_id,
+        where: gl.user_id == ^user_id,
+        order_by: [desc: gl.inserted_at],
         select: %{
-          game_id:   gl.game_id,
-          game_name: gl.game_name,
-          game_slug: gl.game_slug,
-          cover_url: gl.cover_url,
-          status:    gl.status,
-          genre:     gl.genre,
-          rating:    gl.rating,
+          id:               g.id,
+          name:             g.name,
+          slug:             g.slug,
+          cover_image_url:  g.cover_image_url,
+          is_playing:       gl.is_playing,
+          inserted_at:      gl.inserted_at,
         }
       )
       |> Enum.map(&stringify_map/1)
 
-    top_genre =
-      games
-      |> Enum.filter(& &1["genre"])
-      |> Enum.group_by(& &1["genre"])
-      |> Enum.max_by(fn {_, entries} -> length(entries) end, fn -> {nil, []} end)
-      |> elem(0)
-
-    top_rated =
-      games
-      |> Enum.filter(& &1["rating"])
-      |> Enum.max_by(& &1["rating"], fn -> nil end)
+    gamelog_count = length(gamelog_games)
 
     currently_playing =
-      Enum.find(games, fn g -> g["status"] == "playing" end)
+      Enum.find(gamelog_games, & &1["is_playing"])
+
+    # Top genre from gamelog (via game_genre join)
+    top_genre =
+      Repo.one(
+        from gen in "gamepedia_genres",
+        join: gg in "gamepedia_game_genre", on: gg.genre_id == gen.id,
+        join: gl in "gamepedia_gamelogs",   on: gl.game_id == gg.game_id,
+        where: gl.user_id == ^user_id,
+        group_by: [gen.id, gen.name],
+        order_by: [desc: count(gen.id)],
+        limit: 1,
+        select: gen.name
+      )
+
+    # Top rated game by this user
+    top_rated =
+      Repo.one(
+        from r in "gamepedia_ratings",
+        join: g in "gamepedia_games", on: g.id == r.game_id,
+        where: r.user_id == ^user_id,
+        order_by: [desc: r.rating],
+        limit: 1,
+        select: %{
+          id:              g.id,
+          name:            g.name,
+          slug:            g.slug,
+          cover_image_url: g.cover_image_url,
+          rating:          r.rating,
+        }
+      )
+      |> then(fn r -> if r, do: stringify_map(r), else: nil end)
+
+    # ── Most discussed: games with most posts linked (all time) ────────────
+    # gamepedia_post_game: post_id, game_id
+    # Join against nexus posts table to count posts by this user specifically,
+    # and overall post count for the game.
+    most_discussed =
+      Repo.all(
+        from pg in "gamepedia_post_game",
+        join: g in "gamepedia_games", on: g.id == pg.game_id,
+        group_by: [g.id, g.name, g.slug, g.cover_image_url],
+        order_by: [desc: count(pg.post_id)],
+        limit: 5,
+        select: %{
+          id:              g.id,
+          name:            g.name,
+          slug:            g.slug,
+          cover_image_url: g.cover_image_url,
+          post_count:      count(pg.post_id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # Posts this specific user wrote that are linked to games
+    user_most_discussed =
+      Repo.all(
+        from pg in "gamepedia_post_game",
+        join: g in "gamepedia_games",  on: g.id == pg.game_id,
+        join: p in "posts",            on: p.id == pg.post_id,
+        where: p.user_id == ^user_id and p.hidden == false,
+        group_by: [g.id, g.name, g.slug, g.cover_image_url],
+        order_by: [desc: count(pg.post_id)],
+        limit: 5,
+        select: %{
+          id:              g.id,
+          name:            g.name,
+          slug:            g.slug,
+          cover_image_url: g.cover_image_url,
+          post_count:      count(pg.post_id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
 
     %{
-      "gamepedia_available"    => true,
-      "gamepedia_count"        => length(games),
-      "gamepedia_games"        => Enum.take(games, 12),
-      "gamepedia_top_genre"    => top_genre,
-      "gamepedia_top_rated"    => top_rated,
-      "gamepedia_now_playing"  => currently_playing,
+      "gamepedia_available"       => true,
+      "gamepedia_count"           => gamelog_count,
+      "gamepedia_games"           => Enum.take(gamelog_games, 12),
+      "gamepedia_top_genre"       => top_genre,
+      "gamepedia_top_rated"       => top_rated,
+      "gamepedia_now_playing"     => currently_playing,
+      "gamepedia_most_discussed"  => most_discussed,
+      "gamepedia_user_discussed"  => user_most_discussed,
     }
   end
+
 
   # ── Milestones ────────────────────────────────────────────────────────────
 
