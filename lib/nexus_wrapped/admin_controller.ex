@@ -95,6 +95,15 @@ defmodule NexusWrapped.AdminController do
         pct_complete: if(total_active > 0, do: Float.round(generated / total_active * 100, 1), else: 0.0),
       }
     })
+  rescue
+    e ->
+      require Logger
+      Logger.error("NexusWrapped generation_status error: #{inspect(e)}")
+      conn
+      |> put_status(200)
+      |> json(%{data: %{year: String.to_integer(year_str), total_active: 0,
+                        generated: 0, pending: 0, pct_complete: 0.0,
+                        error: "Could not load status — check that migrations ran correctly"}})
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────────

@@ -362,17 +362,17 @@
     ],
   };
 
-  // Tab button style — mirrors TabbedPanel exactly as read from AdminExtensions.jsx
+  // Tab button style — matches the pill style used in Nexus core admin panels
+  // (AdminPanels.jsx tabStyle: borderRadius 20, ac-bg/ac-text/ac border when active)
   function tabBtnStyle(active) {
     return {
       display: "flex", alignItems: "center", gap: 7,
-      padding: "8px 14px", borderRadius: "8px 8px 0 0",
-      background:    active ? "var(--s3)"              : "transparent",
-      border:        active ? "0.5px solid var(--b1)"  : "0.5px solid transparent",
-      borderBottom:  active ? "0.5px solid var(--s3)"  : "none",
-      color:         active ? "var(--t1)"              : "var(--t4)",
+      padding: "6px 16px", borderRadius: 20,
+      background: active ? "var(--ac-bg)"          : "transparent",
+      border:     active ? "0.5px solid var(--ac)"  : "0.5px solid transparent",
+      color:      active ? "var(--ac-text)"         : "var(--t4)",
       cursor: "pointer", fontFamily: "inherit",
-      fontSize: 12, fontWeight: 500, marginBottom: -1,
+      fontSize: 12, fontWeight: 500,
     };
   }
 
@@ -383,8 +383,7 @@
       // Tab bar
       e("div", {
         style: {
-          display: "flex", gap: 4, marginBottom: 24,
-          borderBottom: "0.5px solid var(--b1)", paddingBottom: 0,
+          display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap",
         },
       },
         ...ADMIN_TABS.map(t =>
