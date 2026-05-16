@@ -52,6 +52,12 @@ defmodule NexusWrapped.Generator do
     from_date = Date.new!(year, 1, 1)
     to_date   = Date.new!(year, 12, 31)
 
+    # Apply schema defaults for any key not yet explicitly saved.
+    # SimpleSettingsPanel initialises missing keys as null in the UI, so we
+    # cannot rely on absence meaning "use default" — we must be explicit here.
+    show_gamepedia = Map.get(settings, "show_gamepedia_slide", true) != false
+    show_dms       = Map.get(settings, "show_dms_slide",       true) != false
+
     %{}
     |> Map.merge(core_stats(user_id, from_date, to_date))
     |> Map.merge(timing_stats(user_id, from_date, to_date))
@@ -62,8 +68,8 @@ defmodule NexusWrapped.Generator do
     |> Map.merge(leaderboard_stats(user_id))
     |> Map.merge(save_stats(user_id, from_date, to_date))
     |> Map.merge(mention_stats(user_id, from_date, to_date))
-    |> maybe_merge(dm_stats(user_id, from_date, to_date),       settings["show_dms_slide"] != false)
-    |> maybe_merge(gamepedia_stats(user_id, year),               settings["show_gamepedia_slide"] != false)
+    |> maybe_merge(dm_stats(user_id, from_date, to_date), show_dms)
+    |> maybe_merge(gamepedia_stats(user_id, year),        show_gamepedia)
     |> then(fn stats -> Map.put(stats, "milestones", evaluate_milestones(stats)) end)
   end
 

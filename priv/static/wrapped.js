@@ -348,17 +348,17 @@
 
   const TAB_FIELDS = {
     visibility: [
-      { key: "enabled",             label: "Enable Wrapped",             type: "boolean" },
-      { key: "sharing_default",     label: "Share by default",           type: "boolean" },
-      { key: "min_posts_threshold", label: "Minimum posts to qualify",   type: "number"  },
+      { key: "enabled",             label: "Enable Wrapped",             type: "boolean", default: true  },
+      { key: "sharing_default",     label: "Share by default",           type: "boolean", default: false },
+      { key: "min_posts_threshold", label: "Minimum posts to qualify",   type: "number",  default: 5     },
     ],
     content: [
-      { key: "forum_name_override",  label: "Forum name override",        type: "string"  },
-      { key: "show_gamepedia_slide", label: "Show Gamepedia slide",       type: "boolean" },
-      { key: "show_dms_slide",       label: "Show DMs slide",             type: "boolean" },
+      { key: "forum_name_override",  label: "Forum name override",        type: "string",  default: ""    },
+      { key: "show_gamepedia_slide", label: "Show Gamepedia slide",       type: "boolean", default: true  },
+      { key: "show_dms_slide",       label: "Show DMs slide",             type: "boolean", default: true  },
     ],
     notifications: [
-      { key: "send_notification_email", label: "Send notification email when ready", type: "boolean" },
+      { key: "send_notification_email", label: "Send notification email when ready", type: "boolean", default: true },
     ],
   };
 
