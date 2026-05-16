@@ -362,17 +362,20 @@
     ],
   };
 
-  // Tab button style — matches the pill style used in Nexus core admin panels
-  // (AdminPanels.jsx tabStyle: borderRadius 20, ac-bg/ac-text/ac border when active)
+  // Tab button style — underline style matching all Nexus admin panels in the screenshots:
+  // active tab gets accent color text + 2px accent bottom border, inactive gets muted text
   function tabBtnStyle(active) {
     return {
       display: "flex", alignItems: "center", gap: 7,
-      padding: "6px 16px", borderRadius: 20,
-      background: active ? "var(--ac-bg)"          : "transparent",
-      border:     active ? "0.5px solid var(--ac)"  : "0.5px solid transparent",
-      color:      active ? "var(--ac-text)"         : "var(--t4)",
+      padding: "10px 18px",
+      background: "none", border: "none",
+      borderBottom: active ? "2px solid var(--ac)" : "2px solid transparent",
+      color:        active ? "var(--ac-text)"      : "var(--t4)",
+      fontWeight:   active ? 500 : 400,
       cursor: "pointer", fontFamily: "inherit",
-      fontSize: 12, fontWeight: 500,
+      fontSize: 13, marginBottom: -1,
+      transition: "color .1s",
+      whiteSpace: "nowrap",
     };
   }
 
@@ -383,7 +386,9 @@
       // Tab bar
       e("div", {
         style: {
-          display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap",
+          display: "flex", gap: 0, marginBottom: 24,
+          borderBottom: "0.5px solid var(--b1)",
+          overflowX: "auto", WebkitOverflowScrolling: "touch",
         },
       },
         ...ADMIN_TABS.map(t =>
@@ -467,7 +472,7 @@
       style: { padding: "48px 0", textAlign: "center", color: "var(--t5)", fontSize: 13 },
     },
       e("i", {
-        className: "fa-solid fa-calendar-star",
+        className: "fa-solid fa-wand-sparkles",
         style: { fontSize: 28, opacity: 0.3, marginBottom: 12, display: "block" },
       }),
       isOwn
@@ -707,7 +712,7 @@
   NE.registerAccountAction({
     id:    "wrapped-my-wrapped",
     label: "My Wrapped",
-    icon:  "fa-calendar-star",
+    icon:  "fa-wand-sparkles",
     priority: 80,
     onClick({ currentUser, navigate, close }) {
       close();
@@ -720,7 +725,7 @@
   NE.registerUserAction({
     id:       "wrapped-view",
     label:    "View Wrapped",
-    icon:     "fa-calendar-star",
+    icon:     "fa-wand-sparkles",
     priority: 80,
     authOnly: false,
     onClick({ user, navigate, closeCard }) {
@@ -734,7 +739,7 @@
   NE.registerExploreItem({
     id:       "wrapped",
     label:    "Wrapped",
-    icon:     "fa-calendar-star",
+    icon:     "fa-wand-sparkles",
     page:     "ext-route",
     props:    NE.matchRoute(`/wrapped/${new Date().getFullYear()}/${
       (() => { try { return JSON.parse(localStorage.getItem("nexus_user") || "{}").username || ""; } catch(_) { return ""; } })()
@@ -748,7 +753,7 @@
   // The notification icon and body text are shown in the notifications panel.
   // Clicking marks it read; the user navigates to their Wrapped via the profile tab.
   NE.registerNotificationType("wrapped_ready", {
-    icon:      "fa-calendar-star",
+    icon:      "fa-wand-sparkles",
     iconColor: "var(--ac)",
     renderBody(n) {
       const year = n.data && n.data.year ? n.data.year : new Date().getFullYear();
@@ -766,7 +771,7 @@
   // ── Admin panel ───────────────────────────────────────────────────────────
   NE.registerAdminPanel("wrapped", {
     label:     "Wrapped",
-    icon:      "fa-calendar-star",
+    icon:      "fa-wand-sparkles",
     component: WrappedAdminPanel,
   });
 
