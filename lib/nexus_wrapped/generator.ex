@@ -61,6 +61,7 @@ defmodule NexusWrapped.Generator do
     |> Map.merge(badge_stats(user_id, from_date, to_date))
     |> Map.merge(leaderboard_stats(user_id))
     |> Map.merge(save_stats(user_id, from_date, to_date))
+    |> Map.merge(mention_stats(user_id, from_date, to_date))
     |> maybe_merge(dm_stats(user_id, from_date, to_date),       settings["show_dms_slide"] != false)
     |> maybe_merge(gamepedia_stats(user_id, year),               settings["show_gamepedia_slide"] != false)
     |> then(fn stats -> Map.put(stats, "milestones", evaluate_milestones(stats)) end)
@@ -495,6 +496,63 @@ defmodule NexusWrapped.Generator do
       )
 
     %{"saves_count" => saves_count}
+  end
+
+  # ── Mention stats ─────────────────────────────────────────────────────────
+
+  defp mention_stats(user_id, from_date, to_date) do
+    # Total times this user was @mentioned in the year
+    mentions_received =
+      Repo.aggregate(
+        from(n in "notifications",
+          where: n.user_id == ^user_id
+            and n.type == "mention"
+            and fragment("?::date", n.inserted_at) >= ^from_date
+            and fragment("?::date", n.inserted_at) <= ^to_date
+        ),
+        :count
+      )
+
+    # Who mentioned this user the most (actor_id = the person who wrote the @mention)
+    top_mentioners =
+      Repo.all(
+        from n in "notifications",
+        join: u in "users", on: u.id == n.actor_id,
+        where: n.user_id == ^user_id
+          and n.type == "mention"
+          and not is_nil(n.actor_id)
+          and fragment("?::date", n.inserted_at) >= ^from_date
+          and fragment("?::date", n.inserted_at) <= ^to_date,
+        group_by: [n.actor_id, u.username, u.avatar_url, u.avatar_color],
+        order_by: [desc: count(n.id)],
+        limit: 3,
+        select: %{
+          user_id:      n.actor_id,
+          username:     u.username,
+          avatar_url:   u.avatar_url,
+          avatar_color: u.avatar_color,
+          count:        count(n.id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # How many distinct people mentioned this user
+    unique_mentioners =
+      Repo.one(
+        from n in "notifications",
+        where: n.user_id == ^user_id
+          and n.type == "mention"
+          and not is_nil(n.actor_id)
+          and fragment("?::date", n.inserted_at) >= ^from_date
+          and fragment("?::date", n.inserted_at) <= ^to_date,
+        select: count(n.actor_id, :distinct)
+      ) || 0
+
+    %{
+      "mentions_received"   => mentions_received,
+      "unique_mentioners"   => unique_mentioners,
+      "top_mentioners"      => top_mentioners,
+    }
   end
 
   # ── DM stats ──────────────────────────────────────────────────────────────

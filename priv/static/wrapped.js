@@ -1008,6 +1008,103 @@
     );
   }
 
+  // ── Slide: Mentions ───────────────────────────────────────────────────────
+  function SlideMentions({ d }) {
+    const total     = d.mentions_received || 0;
+    const unique    = d.unique_mentioners || 0;
+    const mentioners = d.top_mentioners || [];
+    const top       = mentioners[0];
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "mentions"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--blue)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.1s" } },
+        e(AnimCounter, { target: total, duration: 1200, delay: 200 })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.3s" } },
+        total === 1 ? "time you were mentioned" : "times you were mentioned"
+      ),
+      unique > 0 && e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.4s" } },
+        `by ${unique} different ${unique === 1 ? "person" : "people"}`
+      ),
+
+      // Top mentioner spotlight
+      top && e("div", {
+        className: "wr-fade-up",
+        style: {
+          marginTop: 36, padding: "18px 24px",
+          background: "var(--s2)", border: "0.5px solid var(--b1)",
+          borderRadius: 14, display: "flex", alignItems: "center",
+          gap: 16, maxWidth: 340, animationDelay: "0.5s",
+        },
+      },
+        // Avatar
+        e("div", {
+          style: {
+            width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
+            background: top.avatar_color || "var(--ac)",
+            overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+          },
+        },
+          top.avatar_url
+            ? e("img", { src: top.avatar_url, alt: top.username, style: { width: "100%", height: "100%", objectFit: "cover" } })
+            : e("span", { style: { fontSize: 18, fontWeight: 600, color: "var(--ac-on)" } },
+                (top.username || "?").slice(0, 2).toUpperCase()
+              )
+        ),
+        e("div", { style: { minWidth: 0 } },
+          e("div", { style: { fontSize: 11, color: "var(--t4)", marginBottom: 4 } },
+            "mentioned you the most"
+          ),
+          e("div", { style: { fontSize: 18, fontWeight: 600, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            `@${top.username || ""}`
+          ),
+          e("div", { style: { fontSize: 13, color: "var(--blue)", marginTop: 3 } },
+            `${top.count || 0} ${(top.count || 0) === 1 ? "mention" : "mentions"}`
+          ),
+        )
+      ),
+
+      // Runner-up mentioners
+      mentioners.length > 1 && e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", gap: 8, marginTop: 16, animationDelay: "0.65s" },
+      },
+        ...mentioners.slice(1).map((m, i) =>
+          e("div", {
+            key: m.user_id || i,
+            className: "wr-pill-pop",
+            style: {
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "6px 12px", borderRadius: 20,
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              animationDelay: `${0.7 + i * 0.08}s`,
+            },
+          },
+            e("div", {
+              style: {
+                width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                background: m.avatar_color || "var(--s3)",
+                overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+              },
+            },
+              m.avatar_url
+                ? e("img", { src: m.avatar_url, alt: m.username, style: { width: "100%", height: "100%", objectFit: "cover" } })
+                : e("span", { style: { fontSize: 9, color: "var(--ac-on)" } }, (m.username || "?").slice(0, 2).toUpperCase())
+            ),
+            e("span", { style: { fontSize: 12, color: "var(--t2)" } }, `@${m.username}`),
+            e("span", { style: { fontSize: 11, color: "var(--t4)" } }, `·\u00a0${m.count}`)
+          )
+        )
+      ),
+
+      total === 0 && e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 20, animationDelay: "0.4s" } },
+        "No one mentioned you this year — yet"
+      )
+    );
+  }
+
   // ── Slide 4: Your spaces ──────────────────────────────────────────────────
   function SlideSpaces({ d }) {
     const spaces   = (d.spaces_breakdown || []).slice(0, 5);
@@ -1288,8 +1385,9 @@
       e(SlideConsistency, { key: `1-${key}`, d }),
       e(SlidePersonality, { key: `2-${key}`, d }),
       e(SlideReactions,   { key: `3-${key}`, d }),
-      e(SlideSpaces,      { key: `4-${key}`, d }),
-      e(SlideRank,        { key: `5-${key}`, d }),
+      e(SlideMentions,    { key: `4-${key}`, d }),
+      e(SlideSpaces,      { key: `5-${key}`, d }),
+      e(SlideRank,        { key: `6-${key}`, d }),
       e(SlideFinale,      { key: `6-${key}`, d, username, year, navigate, isShared: state.data.is_shared }),
     ];
 
