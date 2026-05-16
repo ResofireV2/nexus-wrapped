@@ -790,10 +790,29 @@
   };
 
   // ── Slide 0: Opening ──────────────────────────────────────────────────────
-  function SlideOpening({ d, username, year }) {
+  function SlideOpening({ d, username, year, currentUser }) {
+    const avatarUrl   = currentUser?.avatar_url;
+    const avatarColor = currentUser?.avatar_color || "var(--ac)";
+    const initials    = username ? username.slice(0, 2).toUpperCase() : "??";
+
     return e(Slide, null,
       e(ConfettiBurst, { active: true }),
-      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.1s" } },
+      e("div", { className: "wr-count-pop", style: { animationDelay: "0.05s", marginBottom: 16 } },
+        e("div", {
+          style: {
+            width: 96, height: 96, borderRadius: "50%",
+            border: "3px solid var(--ac)",
+            overflow: "hidden", background: avatarColor,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          },
+        },
+          avatarUrl
+            ? e("img", { src: avatarUrl, alt: username, style: { width: "100%", height: "100%", objectFit: "cover" } })
+            : e("span", { style: { fontSize: 32, fontWeight: 600, color: "var(--ac-on)" } }, initials)
+        )
+      ),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 16, textTransform: "uppercase", animationDelay: "0.15s" } },
         `${username} · ${year}`
       ),
       e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--ac)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.2s" } },
@@ -807,9 +826,7 @@
       ),
       e("div", {
         className: "wr-fade-up",
-        style: {
-          display: "flex", gap: 24, marginTop: 48, animationDelay: "0.7s",
-        },
+        style: { display: "flex", gap: 24, marginTop: 36, animationDelay: "0.7s" },
       },
         ...[
           ["var(--pink)",  (d.reactions_received_total || 0).toLocaleString(), "reactions received"],
@@ -844,25 +861,35 @@
         "day longest streak"
       ),
       e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.4s" } },
-        `active ${d.active_days || 0} days · your biggest month was ${MONTHS[peakIdx]}`
+        `active ${d.active_days || 0} days · biggest month was ${MONTHS[peakIdx]}`
       ),
       e("div", {
         className: "wr-fade-up",
         style: {
-          display: "flex", alignItems: "flex-end", gap: 4,
-          height: 80, marginTop: 48, width: "100%", maxWidth: 420,
+          display: "flex", alignItems: "flex-end", gap: 6,
+          marginTop: 40, width: "100%", maxWidth: 480,
           animationDelay: "0.5s",
         },
       },
         ...monthly.map((val, i) => {
-          const h = Math.max(4, Math.round((val / maxVal) * 72));
+          const h = Math.max(4, Math.round((val / maxVal) * 80));
+          const isPeak = i === peakIdx;
           return e("div", {
             key: i,
-            style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
+            style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 },
           },
+            val > 0 && e("div", {
+              style: {
+                fontSize: 10, color: isPeak ? COLORS[i] : "var(--t5)",
+                fontWeight: isPeak ? 600 : 400,
+                lineHeight: 1,
+              }
+            }, val),
             e("div", {
               style: {
-                width: "100%", background: COLORS[i], borderRadius: "2px 2px 0 0",
+                width: "100%", background: COLORS[i],
+                borderRadius: "3px 3px 0 0",
+                opacity: val === 0 ? 0.2 : 1,
                 height: 0,
                 transition: `height 0.6s cubic-bezier(.22,.68,0,1.2) ${i * 50}ms`,
               },
@@ -870,7 +897,7 @@
                 if (el) setTimeout(() => { el.style.height = h + "px"; }, 100 + i * 50);
               },
             }),
-            e("div", { style: { fontSize: 8, color: "var(--t5)", writingMode: "vertical-rl", transform: "rotate(180deg)" } },
+            e("div", { style: { fontSize: 11, color: "var(--t4)", marginTop: 3, fontWeight: isPeak ? 600 : 400 } },
               MONTHS[i].slice(0, 1)
             )
           );
@@ -1257,7 +1284,7 @@
     const d = state.data.current || state.data;
 
     const slides = [
-      e(SlideOpening,     { key: `0-${key}`, d, username, year }),
+      e(SlideOpening,     { key: `0-${key}`, d, username, year, currentUser }),
       e(SlideConsistency, { key: `1-${key}`, d }),
       e(SlidePersonality, { key: `2-${key}`, d }),
       e(SlideReactions,   { key: `3-${key}`, d }),
@@ -1351,47 +1378,69 @@
 
   // ── Slide: Most Discussed Games ───────────────────────────────────────────
   function SlideGameDiscussed({ d }) {
-    // gamepedia_most_discussed = site-wide top games by post count
-    // gamepedia_user_discussed = games the user specifically posted about most
-    const userTop  = (d.gamepedia_user_discussed  || []).slice(0, 5);
-    const siteTop  = (d.gamepedia_most_discussed   || []).slice(0, 5);
-    const hasUser  = userTop.length > 0;
-    const BAR_COLORS = ["var(--ac)", "var(--pink)", "var(--green)", "var(--blue)", "var(--amber)"];
-    const list     = hasUser ? userTop : siteTop;
-    const maxCount = list.length > 0 ? list[0].post_count || 1 : 1;
+    const userTop = (d.gamepedia_user_discussed || []).slice(0, 5);
+    const siteTop = (d.gamepedia_most_discussed  || []).slice(0, 5);
+    const hasUser = userTop.length > 0;
+    const list    = hasUser ? userTop : siteTop;
 
     return e(Slide, null,
       e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
         hasUser ? "games you talked about" : "most discussed games"
       ),
       list.length > 0
-        ? e("div", { style: { width: "100%", maxWidth: 400, marginTop: 8 } },
+        ? e("div", {
+            className: "wr-fade-up",
+            style: {
+              display: "grid",
+              gridTemplateColumns: `repeat(${Math.min(list.length, 5)}, minmax(0, 1fr))`,
+              gap: 10, width: "100%", maxWidth: 480,
+              animationDelay: "0.15s",
+            },
+          },
             ...list.map((g, i) =>
               e("div", {
                 key: g.id || i,
-                className: "wr-fade-up",
+                className: "wr-pill-pop",
                 style: {
-                  display: "flex", alignItems: "center", gap: 12,
-                  marginBottom: 14, animationDelay: `${0.1 + i * 0.1}s`,
+                  borderRadius: 10, overflow: "hidden",
+                  background: "rgba(255,255,255,.04)",
+                  border: "0.5px solid rgba(255,255,255,.08)",
+                  animationDelay: `${0.15 + i * 0.07}s`,
+                  position: "relative",
                 },
               },
-                e("div", { style: { width: 22, fontSize: 16, fontWeight: 700, color: i === 0 ? "var(--ac)" : "var(--t4)", textAlign: "center", flexShrink: 0 } },
-                  `${i + 1}`
-                ),
-                e("div", { style: { flex: 1, minWidth: 0 } },
-                  e("div", { style: { fontSize: 14, color: "var(--t1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                // Rank badge
+                e("div", {
+                  style: {
+                    position: "absolute", top: 6, left: 6, zIndex: 2,
+                    width: 20, height: 20, borderRadius: "50%",
+                    background: i === 0 ? "var(--ac)" : "rgba(0,0,0,.6)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 10, fontWeight: 700,
+                    color: i === 0 ? "var(--ac-on)" : "rgba(255,255,255,.7)",
+                  },
+                }, `${i + 1}`),
+                // Cover image
+                g.cover_image_url
+                  ? e("img", {
+                      src: g.cover_image_url, alt: g.name,
+                      style: { width: "100%", aspectRatio: "3/4", objectFit: "cover", display: "block" },
+                    })
+                  : e("div", {
+                      style: {
+                        width: "100%", aspectRatio: "3/4",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 24, color: "var(--t5)",
+                      },
+                    }, e("i", { className: "fa-solid fa-gamepad" })),
+                // Info
+                e("div", { style: { padding: "6px 8px 8px" } },
+                  e("div", { style: { fontSize: 11, fontWeight: 500, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
                     g.name || ""
                   ),
-                  e("div", { style: { height: 4, background: "var(--s3)", borderRadius: 2, marginTop: 4, overflow: "hidden" } },
-                    e(AnimBar, {
-                      pct:   Math.round((g.post_count || 0) / maxCount * 100),
-                      color: BAR_COLORS[i],
-                      delay: 200 + i * 100,
-                    })
+                  e("div", { style: { fontSize: 10, color: "var(--t4)", marginTop: 2 } },
+                    `${g.post_count || 0} ${(g.post_count || 0) === 1 ? "post" : "posts"}`
                   )
-                ),
-                e("div", { style: { fontSize: 12, color: "var(--t4)", flexShrink: 0, width: 48, textAlign: "right" } },
-                  `${g.post_count || 0} ${(g.post_count || 0) === 1 ? "post" : "posts"}`
                 )
               )
             )
@@ -1399,7 +1448,7 @@
         : e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t4)", marginTop: 24 } },
             "No game-linked posts yet"
           ),
-      !hasUser && siteTop.length > 0 && e("div", { className: "wr-fade-up", style: { fontSize: 11, color: "var(--t5)", marginTop: 20, animationDelay: "0.6s" } },
+      !hasUser && siteTop.length > 0 && e("div", { className: "wr-fade-up", style: { fontSize: 11, color: "var(--t5)", marginTop: 20, animationDelay: "0.7s" } },
         "across the whole forum"
       )
     );
