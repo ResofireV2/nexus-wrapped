@@ -51,20 +51,49 @@ defmodule NexusWrapped.AdminController do
       {:ok, result} ->
         share = Repo.get_by(NexusWrapped.Share, user_id: admin.id, year: year)
 
-        # Delete any existing wrapped_ready notification for this user+year
-        # so the idempotency check in DeliverNotification doesn't swallow it.
-        Repo.delete_all(
-          from n in "notifications",
-          where: n.user_id == ^admin.id
-            and n.type == "extension"
-            and fragment("(?->>'ext_type')", n.data) == "wrapped_ready"
-        )
+        # For simulate, bypass Oban entirely — insert and broadcast directly.
+        # notify_extension enqueues an Oban job with unique: [period: 30],
+        # so repeated simulates within 30s are silently deduped at the job level.
+        # Direct insert + PubSub broadcast guarantees the notification fires every time.
+        data = %{
+          "ext_type" => "wrapped_ready",
+          "year"     => year,
+          "username" => admin.username
+        }
 
-        Nexus.Notifications.notify_extension(
-          admin.id,
-          "wrapped_ready",
-          data: %{"year" => year, "username" => admin.username}
-        )
+        case Nexus.Notifications.create_notification(%{
+          type:    "extension",
+          user_id: admin.id,
+          data:    data
+        }) do
+          {:ok, notif} ->
+            Phoenix.PubSub.broadcast(
+              Nexus.PubSub,
+              "notifications:#{admin.id}",
+              {:new_notification, %{
+                id:           notif.id,
+                type:         "extension",
+                read:         false,
+                data:         data,
+                group_count:  1,
+                group_actors: [],
+                inserted_at:  notif.inserted_at,
+                actor:        nil,
+                post_id:      nil,
+                reply_id:     nil,
+                message_id:   nil,
+              }}
+            )
+
+            unread = Nexus.Notifications.unread_count(admin.id)
+            Phoenix.PubSub.broadcast(
+              Nexus.PubSub,
+              "notifications:#{admin.id}",
+              {:unread_count, unread}
+            )
+
+          _ -> :ok
+        end
 
         json(conn, %{
           data: %{
