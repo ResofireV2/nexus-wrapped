@@ -18,14 +18,16 @@ defmodule NexusWrapped.ApiRouter do
     plug :require_admin
   end
 
-  # ── Public routes ─────────────────────────────────────────────────────────
-  # Any logged-in user can view a shared Wrapped. Unauthenticated users
-  # can also view shared Wrappeds (for public share links).
+  # ── Admin routes — declared FIRST so they take priority ──────────────────
+  # path_info arrives as ["admin", ...] after extension router strips /api
 
-  scope "/" do
-    pipe_through :api
+  scope "/admin" do
+    pipe_through [:api, :admin]
 
-    get "/:year/:username", NexusWrapped.WrappedController, :show
+    post "/generate",          NexusWrapped.AdminController, :generate_all
+    post "/generate/:user_id", NexusWrapped.AdminController, :generate_one
+    post "/simulate",          NexusWrapped.AdminController, :simulate
+    get  "/status/:year",      NexusWrapped.AdminController, :generation_status
   end
 
   # ── Authenticated routes ──────────────────────────────────────────────────
@@ -33,19 +35,16 @@ defmodule NexusWrapped.ApiRouter do
   scope "/" do
     pipe_through [:api, :auth]
 
-    get  "/",                    NexusWrapped.WrappedController, :index
-    patch "/:year/share",        NexusWrapped.WrappedController, :update_share
+    get   "/",             NexusWrapped.WrappedController, :index
+    patch "/:year/share",  NexusWrapped.WrappedController, :update_share
   end
 
-  # ── Admin routes ──────────────────────────────────────────────────────────
+  # ── Public routes — catch-all last ────────────────────────────────────────
 
-  scope "/admin" do
-    pipe_through [:api, :admin]
+  scope "/" do
+    pipe_through :api
 
-    post "/generate",             NexusWrapped.AdminController, :generate_all
-    post "/generate/:user_id",    NexusWrapped.AdminController, :generate_one
-    post "/simulate",             NexusWrapped.AdminController, :simulate
-    get  "/status/:year",         NexusWrapped.AdminController, :generation_status
+    get "/:year/:username", NexusWrapped.WrappedController, :show
   end
 
   # ── Plugs ─────────────────────────────────────────────────────────────────
