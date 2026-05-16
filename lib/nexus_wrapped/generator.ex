@@ -501,58 +501,73 @@ defmodule NexusWrapped.Generator do
   # ── Mention stats ─────────────────────────────────────────────────────────
 
   defp mention_stats(user_id, from_date, to_date) do
-    # Total times this user was @mentioned in the year
-    mentions_received =
-      Repo.aggregate(
-        from(n in "notifications",
-          where: n.user_id == ^user_id
-            and n.type == "mention"
-            and fragment("?::date", n.inserted_at) >= ^from_date
-            and fragment("?::date", n.inserted_at) <= ^to_date
-        ),
-        :count
-      )
+    # Look up the username — needed for the ilike pattern
+    username =
+      Repo.one(from u in "users", where: u.id == ^user_id, select: u.username)
 
-    # Who mentioned this user the most (actor_id = the person who wrote the @mention)
-    top_mentioners =
-      Repo.all(
-        from n in "notifications",
-        join: u in "users", on: u.id == n.actor_id,
-        where: n.user_id == ^user_id
-          and n.type == "mention"
-          and not is_nil(n.actor_id)
-          and fragment("?::date", n.inserted_at) >= ^from_date
-          and fragment("?::date", n.inserted_at) <= ^to_date,
-        group_by: [n.actor_id, u.username, u.avatar_url, u.avatar_color],
-        order_by: [desc: count(n.id)],
-        limit: 3,
-        select: %{
-          user_id:      n.actor_id,
-          username:     u.username,
-          avatar_url:   u.avatar_url,
-          avatar_color: u.avatar_color,
-          count:        count(n.id),
-        }
-      )
-      |> Enum.map(&stringify_map/1)
+    if is_nil(username) do
+      %{"mentions_received" => 0, "unique_mentioners" => 0, "top_mentioners" => []}
+    else
+      pattern = "@#{username}"
 
-    # How many distinct people mentioned this user
-    unique_mentioners =
-      Repo.one(
-        from n in "notifications",
-        where: n.user_id == ^user_id
-          and n.type == "mention"
-          and not is_nil(n.actor_id)
-          and fragment("?::date", n.inserted_at) >= ^from_date
-          and fragment("?::date", n.inserted_at) <= ^to_date,
-        select: count(n.actor_id, :distinct)
-      ) || 0
+      # Posts that mention this user (written by someone else, not hidden)
+      mention_posts =
+        Repo.all(
+          from p in "posts",
+          where: p.hidden == false
+            and fragment("?::date", p.inserted_at) >= ^from_date
+            and fragment("?::date", p.inserted_at) <= ^to_date
+            and ilike(p.body, ^"%#{pattern}%")
+            and p.user_id != ^user_id,
+          select: %{author_id: p.user_id}
+        )
 
-    %{
-      "mentions_received"   => mentions_received,
-      "unique_mentioners"   => unique_mentioners,
-      "top_mentioners"      => top_mentioners,
-    }
+      # Replies that mention this user (written by someone else, not hidden)
+      mention_replies =
+        Repo.all(
+          from r in "replies",
+          join: p in "posts", on: p.id == r.post_id and p.hidden == false,
+          where: r.hidden == false
+            and fragment("?::date", r.inserted_at) >= ^from_date
+            and fragment("?::date", r.inserted_at) <= ^to_date
+            and ilike(r.body, ^"%#{pattern}%")
+            and r.user_id != ^user_id,
+          select: %{author_id: r.user_id}
+        )
+
+      all_mentions = mention_posts ++ mention_replies
+      total = length(all_mentions)
+
+      # Group by author to find top mentioners
+      by_author =
+        all_mentions
+        |> Enum.group_by(& &1.author_id)
+        |> Enum.map(fn {author_id, entries} -> {author_id, length(entries)} end)
+        |> Enum.sort_by(fn {_, count} -> count end, :desc)
+        |> Enum.take(3)
+
+      unique = length(by_author)
+
+      # Fetch user details for top mentioners
+      top_ids = Enum.map(by_author, fn {id, _} -> id end)
+      count_map = Map.new(by_author)
+
+      top_mentioners =
+        Repo.all(
+          from u in "users",
+          where: u.id in ^top_ids,
+          select: %{id: u.id, username: u.username, avatar_url: u.avatar_url, avatar_color: u.avatar_color}
+        )
+        |> Enum.map(&stringify_map/1)
+        |> Enum.map(fn u -> Map.put(u, "count", count_map[u["id"]] || 0) end)
+        |> Enum.sort_by(& -&1["count"])
+
+      %{
+        "mentions_received" => total,
+        "unique_mentioners" => unique,
+        "top_mentioners"    => top_mentioners,
+      }
+    end
   end
 
   # ── DM stats ──────────────────────────────────────────────────────────────
