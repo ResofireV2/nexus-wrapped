@@ -622,14 +622,590 @@
   }
 
   // =========================================================================
-  // FULL-SCREEN WRAPPED ROUTE
+  // WRAPPED ANIMATIONS — injected once into document head
   // =========================================================================
-  // Registered at /wrapped/:year/:username
-  // Placeholder — the full slide deck is built in Phase 3.
-  // For now it renders a loading→data state so the backend can be verified.
 
+  (function injectWrappedStyles() {
+    if (document.getElementById("wrapped-keyframes")) return;
+    const s = document.createElement("style");
+    s.id = "wrapped-keyframes";
+    s.textContent = `
+      @keyframes wr-fade-up {
+        from { opacity: 0; transform: translateY(28px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes wr-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      @keyframes wr-count-pop {
+        0%   { opacity: 0; transform: scale(0.6); }
+        70%  { transform: scale(1.06); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes wr-bar-grow {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+      }
+      @keyframes wr-confetti-fall {
+        0%   { transform: translateY(-20px) rotate(0deg);   opacity: 0; }
+        15%  { opacity: 1; }
+        100% { transform: translateY(60px) rotate(360deg);  opacity: 0; }
+      }
+      @keyframes wr-pill-pop {
+        0%   { opacity: 0; transform: scale(0.7) translateY(8px); }
+        80%  { transform: scale(1.04) translateY(0); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes wr-pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.55; }
+      }
+      @keyframes wr-slide-in-right {
+        from { opacity: 0; transform: translateX(40px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes wr-rank-drop {
+        0%   { opacity: 0; transform: translateY(-40px) scale(0.8); }
+        60%  { transform: translateY(6px) scale(1.05); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes wr-shimmer {
+        0%   { opacity: 0.7; }
+        50%  { opacity: 1; }
+        100% { opacity: 0.7; }
+      }
+      .wr-fade-up   { animation: wr-fade-up 0.55s cubic-bezier(.22,.68,0,1.2) both; }
+      .wr-fade-in   { animation: wr-fade-in 0.4s ease both; }
+      .wr-count-pop { animation: wr-count-pop 0.6s cubic-bezier(.22,.68,0,1.2) both; }
+      .wr-pill-pop  { animation: wr-pill-pop 0.45s cubic-bezier(.22,.68,0,1.2) both; }
+      .wr-rank-drop { animation: wr-rank-drop 0.7s cubic-bezier(.22,.68,0,1.2) both; }
+      .wr-slide-r   { animation: wr-slide-in-right 0.5s cubic-bezier(.22,.68,0,1.2) both; }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // =========================================================================
+  // FULL-SCREEN WRAPPED ROUTE — 7-slide animated deck
+  // =========================================================================
+
+  // ── Confetti burst component ──────────────────────────────────────────────
+  function ConfettiBurst({ active }) {
+    const PIECES = 18;
+    const COLORS = ["var(--ac)", "var(--pink)", "var(--green)", "var(--blue)", "var(--amber)"];
+    if (!active) return null;
+    return e("div", {
+      style: {
+        position: "absolute", top: 0, left: 0, right: 0,
+        height: 120, overflow: "hidden", pointerEvents: "none", zIndex: 0,
+      },
+    },
+      ...Array.from({ length: PIECES }, (_, i) => {
+        const left  = 5 + (i / PIECES) * 90;
+        const delay = (i * 0.07).toFixed(2);
+        const dur   = (0.9 + Math.random() * 0.6).toFixed(2);
+        const color = COLORS[i % COLORS.length];
+        const size  = 4 + (i % 4);
+        return e("div", {
+          key: i,
+          style: {
+            position: "absolute",
+            left: `${left}%`,
+            top: `-${size}px`,
+            width: size,
+            height: size * 2.5,
+            borderRadius: 2,
+            background: color,
+            animation: `wr-confetti-fall ${dur}s ${delay}s ease-in both`,
+            transform: `rotate(${(i * 37) % 180}deg)`,
+          },
+        });
+      })
+    );
+  }
+
+  // ── Animated counter ──────────────────────────────────────────────────────
+  function AnimCounter({ target, duration = 1200, delay = 0 }) {
+    const [val, setVal] = useState(0);
+    useEffect(() => {
+      let start = null;
+      let raf;
+      const tick = (ts) => {
+        if (!start) start = ts + delay;
+        const elapsed = Math.max(0, ts - start);
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setVal(Math.round(eased * target));
+        if (progress < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }, [target, duration, delay]);
+    return e(React.Fragment, null, val.toLocaleString());
+  }
+
+  // ── Animated bar ──────────────────────────────────────────────────────────
+  function AnimBar({ pct, color, delay = 0 }) {
+    const [width, setWidth] = useState(0);
+    useEffect(() => {
+      const t = setTimeout(() => setWidth(pct), delay + 80);
+      return () => clearTimeout(t);
+    }, [pct, delay]);
+    return e("div", {
+      style: {
+        height: "100%", borderRadius: 3,
+        background: color,
+        width: `${width}%`,
+        transition: `width 0.8s cubic-bezier(.22,.68,0,1.2) ${delay}ms`,
+      },
+    });
+  }
+
+  // ── Slide shell ───────────────────────────────────────────────────────────
+  function Slide({ children, style = {} }) {
+    return e("div", {
+      style: {
+        position: "relative",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: "80px 32px 100px",
+        textAlign: "center",
+        background: "var(--bg)",
+        overflow: "hidden",
+        ...style,
+      },
+    }, children);
+  }
+
+  // ── DOW / hour label helpers ──────────────────────────────────────────────
+  const DOW_LABELS  = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const HOUR_LABELS = (h) => {
+    if (h === 0)  return "midnight";
+    if (h < 12)   return `${h}am`;
+    if (h === 12) return "noon";
+    return `${h - 12}pm`;
+  };
+
+  // ── Slide 0: Opening ──────────────────────────────────────────────────────
+  function SlideOpening({ d, username, year }) {
+    return e(Slide, null,
+      e(ConfettiBurst, { active: true }),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.1s" } },
+        `${username} · ${year}`
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--ac)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.2s" } },
+        e(AnimCounter, { target: d.posts_count || 0, duration: 1400, delay: 300 })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.4s" } },
+        "posts written this year"
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.55s" } },
+        `plus ${(d.replies_count || 0).toLocaleString()} replies`
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: {
+          display: "flex", gap: 24, marginTop: 48, animationDelay: "0.7s",
+        },
+      },
+        ...[
+          ["var(--pink)",  (d.reactions_received_total || 0).toLocaleString(), "reactions received"],
+          ["var(--green)", (d.reactions_given || 0).toLocaleString(), "reactions given"],
+          ["var(--blue)",  (d.active_days || 0).toLocaleString(), "active days"],
+        ].map(([color, val, label]) =>
+          e("div", { key: label, style: { textAlign: "center" } },
+            e("div", { style: { fontSize: 28, fontWeight: 600, color, lineHeight: 1 } }, val),
+            e("div", { style: { fontSize: 11, color: "var(--t4)", marginTop: 5 } }, label)
+          )
+        )
+      )
+    );
+  }
+
+  // ── Slide 1: Consistency ──────────────────────────────────────────────────
+  function SlideConsistency({ d }) {
+    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthly = d.posts_per_month || Array(12).fill(0);
+    const maxVal  = Math.max(...monthly, 1);
+    const peakIdx = monthly.indexOf(Math.max(...monthly));
+    const COLORS  = ["var(--ac)","var(--pink)","var(--green)","var(--blue)","var(--amber)","var(--ac)","var(--pink)","var(--green)","var(--blue)","var(--amber)","var(--ac)","var(--pink)"];
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "consistency"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--amber)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.1s" } },
+        e(AnimCounter, { target: d.longest_streak || 0, duration: 1200, delay: 200 })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.3s" } },
+        "day longest streak"
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.4s" } },
+        `active ${d.active_days || 0} days · your biggest month was ${MONTHS[peakIdx]}`
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: {
+          display: "flex", alignItems: "flex-end", gap: 4,
+          height: 80, marginTop: 48, width: "100%", maxWidth: 420,
+          animationDelay: "0.5s",
+        },
+      },
+        ...monthly.map((val, i) => {
+          const h = Math.max(4, Math.round((val / maxVal) * 72));
+          return e("div", {
+            key: i,
+            style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
+          },
+            e("div", {
+              style: {
+                width: "100%", background: COLORS[i], borderRadius: "2px 2px 0 0",
+                height: 0,
+                transition: `height 0.6s cubic-bezier(.22,.68,0,1.2) ${i * 50}ms`,
+              },
+              ref: (el) => {
+                if (el) setTimeout(() => { el.style.height = h + "px"; }, 100 + i * 50);
+              },
+            }),
+            e("div", { style: { fontSize: 8, color: "var(--t5)", writingMode: "vertical-rl", transform: "rotate(180deg)" } },
+              MONTHS[i].slice(0, 1)
+            )
+          );
+        })
+      )
+    );
+  }
+
+  // ── Slide 2: Personality ──────────────────────────────────────────────────
+  function SlidePersonality({ d }) {
+    const hour    = d.most_active_hour || 0;
+    const dow     = d.most_active_dow  || 0;
+    const isOwl   = (d.night_owl_score   || 0) >= 40;
+    const isBird  = (d.early_bird_score  || 0) >= 40;
+    const isWknd  = (d.weekend_score     || 0) >= 50;
+    const persona = isOwl ? "Night owl" : isBird ? "Early bird" : isWknd ? "Weekend warrior" : "All-day poster";
+    const personaIcon = isOwl ? "fa-moon" : isBird ? "fa-sun" : isWknd ? "fa-umbrella-beach" : "fa-fire";
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "your style"
+      ),
+      e("div", { className: "wr-count-pop", style: { animationDelay: "0.1s" } },
+        e("i", { className: `fa-solid ${personaIcon}`, style: { fontSize: 56, color: "var(--ac)" } })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 32, fontWeight: 700, color: "var(--t1)", marginTop: 16, animationDelay: "0.25s" } },
+        persona
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t3)", marginTop: 10, animationDelay: "0.35s" } },
+        `You post most at ${HOUR_LABELS(hour)} on ${DOW_LABELS[dow]}s`
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", gap: 10, marginTop: 36, flexWrap: "wrap", justifyContent: "center", animationDelay: "0.5s" },
+      },
+        ...([
+          isOwl  && ["fa-moon",           "var(--blue)",  "Night owl"],
+          isBird && ["fa-sun",            "var(--amber)", "Early bird"],
+          isWknd && ["fa-umbrella-beach", "var(--green)", "Weekend warrior"],
+          (d.saves_count || 0) >= 20      && ["fa-bookmark", "var(--pink)",  "Collector"],
+          (d.reactions_given || 0) >= 100 && ["fa-heart",    "var(--pink)",  "Generous"],
+        ].filter(Boolean)).map(([icon, color, label], i) =>
+          e("div", {
+            key: label,
+            className: "wr-pill-pop",
+            style: {
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "8px 16px", borderRadius: 20,
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              color: "var(--t2)", fontSize: 13,
+              animationDelay: `${0.55 + i * 0.08}s`,
+            },
+          },
+            e("i", { className: `fa-solid ${icon}`, style: { color, fontSize: 13 } }),
+            label
+          )
+        )
+      )
+    );
+  }
+
+  // ── Slide 3: Reactions ────────────────────────────────────────────────────
+  function SlideReactions({ d }) {
+    const breakdown = (d.reactions_received_breakdown || []).slice(0, 5);
+    const total     = d.reactions_received_total || 0;
+    const topReactor = d.top_reactor;
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "the love you got"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--pink)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.1s" } },
+        e(AnimCounter, { target: total, duration: 1200, delay: 200 })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.3s" } },
+        "reactions received"
+      ),
+      breakdown.length > 0 && e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", gap: 12, marginTop: 36, justifyContent: "center", animationDelay: "0.45s" },
+      },
+        ...breakdown.map((item, i) =>
+          e("div", {
+            key: item.emoji || i,
+            className: "wr-pill-pop",
+            style: {
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              padding: "12px 16px", borderRadius: 12,
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              animationDelay: `${0.5 + i * 0.07}s`,
+            },
+          },
+            e("span", { style: { fontSize: 28 } }, item.emoji || "❤️"),
+            e("span", { style: { fontSize: 13, fontWeight: 600, color: "var(--t1)" } }, (item.count || 0).toLocaleString()),
+          )
+        )
+      ),
+      topReactor && e("div", {
+        className: "wr-fade-up",
+        style: {
+          marginTop: 32, fontSize: 13, color: "var(--t4)", animationDelay: "0.8s",
+        },
+      },
+        e("span", { style: { color: "var(--t3)" } }, "your biggest fan: "),
+        e("span", { style: { color: "var(--ac-text)", fontWeight: 500 } }, topReactor.username || ""),
+        e("span", { style: { color: "var(--t5)" } }, ` · ${(topReactor.count || 0).toLocaleString()} reactions`)
+      )
+    );
+  }
+
+  // ── Slide 4: Your spaces ──────────────────────────────────────────────────
+  function SlideSpaces({ d }) {
+    const spaces   = (d.spaces_breakdown || []).slice(0, 5);
+    const topSpace = d.top_space;
+    const maxCount = spaces.length > 0 ? spaces[0].post_count || 1 : 1;
+    const BAR_COLORS = ["var(--ac)", "var(--pink)", "var(--green)", "var(--blue)", "var(--amber)"];
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "your home"
+      ),
+      topSpace && e("div", { className: "wr-count-pop", style: { fontSize: 44, fontWeight: 700, color: "var(--ac)", lineHeight: 1.1, animationDelay: "0.1s", maxWidth: 360 } },
+        topSpace.name || "General"
+      ),
+      topSpace && e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t3)", marginTop: 8, animationDelay: "0.25s" } },
+        `${Math.round(d.top_space_pct || 0)}% of your posts this year`
+      ),
+      spaces.length > 0 && e("div", {
+        style: { width: "100%", maxWidth: 380, marginTop: 36 },
+      },
+        ...spaces.map((sp, i) =>
+          e("div", {
+            key: sp.slug || i,
+            className: "wr-fade-up",
+            style: {
+              display: "flex", alignItems: "center", gap: 12,
+              marginBottom: 12, animationDelay: `${0.3 + i * 0.1}s`,
+            },
+          },
+            e("div", { style: { width: 96, textAlign: "right", fontSize: 12, color: "var(--t3)", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+              sp.name || ""
+            ),
+            e("div", { style: { flex: 1, height: 6, background: "var(--s3)", borderRadius: 3, overflow: "hidden" } },
+              e(AnimBar, {
+                pct:   Math.round((sp.post_count || 0) / maxCount * 100),
+                color: BAR_COLORS[i],
+                delay: 300 + i * 100,
+              })
+            ),
+            e("div", { style: { width: 36, fontSize: 12, color: "var(--t4)", flexShrink: 0 } },
+              (sp.post_count || 0).toLocaleString()
+            )
+          )
+        )
+      )
+    );
+  }
+
+  // ── Slide 5: Rank + milestones ────────────────────────────────────────────
+  function SlideRank({ d }) {
+    const rank = d.leaderboard_rank || null;
+    const milestones = d.milestones || [];
+    const MILESTONE_LABELS = {
+      centurion:        ["fa-pen",          "var(--ac)",    "Centurion"],
+      prolific:         ["fa-fire",         "var(--amber)", "Prolific"],
+      unstoppable:      ["fa-bolt",         "var(--amber)", "Unstoppable"],
+      daily_regular:    ["fa-calendar",     "var(--green)", "Regular"],
+      streak_7:         ["fa-fire",         "var(--amber)", "On a roll"],
+      streak_30:        ["fa-fire",         "var(--amber)", "Streak master"],
+      streak_100:       ["fa-crown",        "var(--amber)", "Streak legend"],
+      night_owl:        ["fa-moon",         "var(--blue)",  "Night owl"],
+      early_bird:       ["fa-sun",          "var(--amber)", "Early bird"],
+      weekend_warrior:  ["fa-umbrella-beach","var(--green)","Weekend warrior"],
+      popular:          ["fa-heart",        "var(--pink)",  "Popular"],
+      generous:         ["fa-hand-holding-heart","var(--pink)","Generous"],
+      collector:        ["fa-bookmark",     "var(--blue)",  "Collector"],
+      communicator:     ["fa-message",      "var(--green)", "Communicator"],
+      badge_hunter:     ["fa-medal",        "var(--amber)", "Badge hunter"],
+      top_10:           ["fa-trophy",       "var(--amber)", "Top 10"],
+    };
+
+    return e(Slide, null,
+      e(ConfettiBurst, { active: true }),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 24, textTransform: "uppercase" } },
+        "leaderboard"
+      ),
+      rank && e("div", { className: "wr-rank-drop", style: { fontSize: 100, fontWeight: 700, color: "var(--ac)", lineHeight: 1, letterSpacing: -4, animationDelay: "0.1s" } },
+        `#${rank}`
+      ),
+      rank && e("div", { className: "wr-fade-up", style: { fontSize: 16, color: "var(--t3)", marginTop: 10, animationDelay: "0.4s" } },
+        "you finished the year here"
+      ),
+      milestones.length > 0 && e("div", {
+        style: { display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 36, maxWidth: 420 },
+      },
+        ...milestones.slice(0, 8).map((key, i) => {
+          const [icon, color, label] = MILESTONE_LABELS[key] || ["fa-star", "var(--ac)", key];
+          return e("div", {
+            key,
+            className: "wr-pill-pop",
+            style: {
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 20,
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              color: "var(--t2)", fontSize: 12,
+              animationDelay: `${0.5 + i * 0.06}s`,
+            },
+          },
+            e("i", { className: `fa-solid ${icon}`, style: { color, fontSize: 11 } }),
+            label
+          );
+        })
+      )
+    );
+  }
+
+  // ── Slide 6: Finale ───────────────────────────────────────────────────────
+  function SlideFinale({ d, username, year, navigate }) {
+    return e(Slide, null,
+      e(ConfettiBurst, { active: true }),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.05s" } },
+        "that's a wrap"
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 36, fontWeight: 700, color: "var(--t1)", lineHeight: 1.15, maxWidth: 320, animationDelay: "0.15s" } },
+        `what a year, ${username}`
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: {
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
+          marginTop: 36, width: "100%", maxWidth: 340,
+          animationDelay: "0.3s",
+        },
+      },
+        ...[
+          [(d.posts_count || 0).toLocaleString(),   "posts"],
+          [(d.active_days || 0).toLocaleString(),   "active days"],
+          [`#${d.leaderboard_rank || "—"}`,          "rank"],
+          [(d.badges_earned_count || 0).toLocaleString(), "badges earned"],
+        ].map(([val, label]) =>
+          e("div", {
+            key: label,
+            style: {
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              borderRadius: 12, padding: "16px",
+              textAlign: "center",
+            },
+          },
+            e("div", { style: { fontSize: 28, fontWeight: 700, color: "var(--ac)", lineHeight: 1 } }, val),
+            e("div", { style: { fontSize: 11, color: "var(--t4)", marginTop: 5 } }, label)
+          )
+        )
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", gap: 10, marginTop: 32, animationDelay: "0.55s" },
+      },
+        e("button", {
+          onClick: () => navigate("profile", { username, tab: "wrapped" }),
+          style: {
+            padding: "10px 22px", borderRadius: 24,
+            background: "var(--ac)", border: "none",
+            color: "var(--ac-on)", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit",
+          },
+        }, "View my profile"),
+        e("button", {
+          onClick: () => {
+            if (navigator.share) {
+              navigator.share({ title: `${username}'s ${year} Wrapped`, url: window.location.href });
+            }
+          },
+          style: {
+            padding: "10px 22px", borderRadius: 24,
+            background: "none", border: "0.5px solid var(--b2)",
+            color: "var(--t2)", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+          },
+        }, "Share")
+      )
+    );
+  }
+
+  // ── Nav overlay ───────────────────────────────────────────────────────────
+  function SlideNav({ current, total, onPrev, onNext }) {
+    return e("div", {
+      style: {
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "16px 24px",
+        background: "var(--s1)", borderTop: "0.5px solid var(--b1)",
+        zIndex: 100,
+      },
+    },
+      e("button", {
+        onClick: onPrev, disabled: current === 0,
+        style: {
+          background: "none", border: "0.5px solid var(--b2)",
+          color: current === 0 ? "var(--t5)" : "var(--t3)",
+          borderRadius: 8, padding: "7px 16px", cursor: current === 0 ? "default" : "pointer",
+          fontSize: 13, fontFamily: "inherit",
+        },
+      }, "← back"),
+      e("div", { style: { display: "flex", gap: 6, alignItems: "center" } },
+        ...Array.from({ length: total }, (_, i) =>
+          e("div", {
+            key: i,
+            style: {
+              height: 5, borderRadius: 3,
+              background: i === current ? "var(--ac)" : "var(--b2)",
+              width: i === current ? 20 : 5,
+              transition: "all 0.25s ease",
+              cursor: "pointer",
+            },
+          })
+        )
+      ),
+      e("button", {
+        onClick: onNext, disabled: current === total - 1,
+        style: {
+          background: current === total - 1 ? "none" : "var(--ac)",
+          border: current === total - 1 ? "0.5px solid var(--b2)" : "none",
+          color: current === total - 1 ? "var(--t5)" : "var(--ac-on)",
+          borderRadius: 8, padding: "7px 16px",
+          cursor: current === total - 1 ? "default" : "pointer",
+          fontSize: 13, fontFamily: "inherit", fontWeight: 500,
+        },
+      }, current === total - 1 ? "done" : "next →")
+    );
+  }
+
+  // ── WrappedPage root ──────────────────────────────────────────────────────
   function WrappedPage({ year, username, currentUser, navigate }) {
-    const [state, setState] = useState({ status: "loading" });
+    const [state,   setState]   = useState({ status: "loading" });
+    const [current, setCurrent] = useState(0);
+    const [key,     setKey]     = useState(0);
 
     useEffect(() => {
       apiFetch(`/${year}/${encodeURIComponent(username)}`)
@@ -640,58 +1216,99 @@
         .catch(() => setState({ status: "error", code: "network_error" }));
     }, [year, username]);
 
-    const containerStyle = {
-      minHeight: "100vh", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      padding: 24, background: "var(--bg)",
+    const go = (n) => {
+      setCurrent(n);
+      setKey(k => k + 1);
     };
 
-    if (state.status === "loading") return e("div", { style: containerStyle },
-      e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 24, color: "var(--ac)" } })
-    );
+    if (state.status === "loading") return e("div", {
+      style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
+    }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 24, color: "var(--ac)" } }));
 
     if (state.status === "error") {
-      const messages = {
-        not_generated: "Wrapped hasn't been generated yet.",
-        private:       "This Wrapped is private.",
-        network_error: "Could not load Wrapped. Check your connection.",
-      };
-      return e("div", { style: { ...containerStyle, gap: 12 } },
+      const msgs = { not_generated: "Wrapped hasn't been generated yet.", private: "This Wrapped is private.", network_error: "Could not load. Check your connection." };
+      return e("div", {
+        style: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, background: "var(--bg)", padding: 32 },
+      },
         e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 28, color: "var(--amber)" } }),
-        e("div", { style: { fontSize: 15, color: "var(--t2)" } },
-          messages[state.code] || "Something went wrong."
-        ),
+        e("div", { style: { fontSize: 15, color: "var(--t2)" } }, msgs[state.code] || "Something went wrong."),
         e("button", {
           onClick: () => navigate("profile", { username }),
-          style: {
-            fontSize: 13, padding: "7px 18px", borderRadius: 8,
-            background: "none", border: "0.5px solid var(--b1)",
-            color: "var(--t4)", cursor: "pointer", fontFamily: "inherit", marginTop: 8,
-          },
+          style: { fontSize: 13, padding: "7px 18px", borderRadius: 8, background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)", cursor: "pointer", fontFamily: "inherit", marginTop: 8 },
         }, `Back to ${username}'s profile`)
       );
     }
 
-    // Phase 3 will replace this with the full slide deck.
-    // For now render the raw data so the backend can be verified.
-    const { data } = state;
+    const d = state.data.current || state.data;
+
+    const slides = [
+      e(SlideOpening,     { key: `0-${key}`, d, username, year }),
+      e(SlideConsistency, { key: `1-${key}`, d }),
+      e(SlidePersonality, { key: `2-${key}`, d }),
+      e(SlideReactions,   { key: `3-${key}`, d }),
+      e(SlideSpaces,      { key: `4-${key}`, d }),
+      e(SlideRank,        { key: `5-${key}`, d }),
+      e(SlideFinale,      { key: `6-${key}`, d, username, year, navigate }),
+    ];
+
+    // Conditionally add Gamepedia slide if available
+    if (d.gamepedia_available && d.gamepedia_count > 0) {
+      slides.splice(5, 0, e(SlideGamepedia, { key: `gp-${key}`, d }));
+    }
+
     return e("div", {
-      style: {
-        maxWidth: 640, margin: "0 auto", padding: 24,
-        background: "var(--bg)", minHeight: "100vh",
-      },
+      style: { position: "relative", minHeight: "100vh", background: "var(--bg)" },
     },
-      e("div", { style: { fontSize: 22, fontWeight: 700, color: "var(--t1)", marginBottom: 6 } },
-        `${username}'s ${data.year} Wrapped`),
-      e("div", { style: { fontSize: 13, color: "var(--t5)", marginBottom: 24 } },
-        "Slide deck coming in Phase 3 — backend data preview:"),
-      e("pre", {
+      slides[current],
+      e(SlideNav, {
+        current,
+        total: slides.length,
+        onPrev: () => go(Math.max(0, current - 1)),
+        onNext: () => go(Math.min(slides.length - 1, current + 1)),
+      })
+    );
+  }
+
+  // ── Optional Gamepedia slide ──────────────────────────────────────────────
+  function SlideGamepedia({ d }) {
+    const games    = (d.gamepedia_games || []).slice(0, 6);
+    const topGenre = d.gamepedia_top_genre;
+    const topRated = d.gamepedia_top_rated;
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "your games"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 80, fontWeight: 700, color: "var(--green)", lineHeight: 1, letterSpacing: -3, animationDelay: "0.1s" } },
+        e(AnimCounter, { target: d.gamepedia_count || 0, duration: 1000, delay: 200 })
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 20, color: "var(--t2)", marginTop: 14, animationDelay: "0.3s" } },
+        "games logged this year"
+      ),
+      topGenre && e("div", { className: "wr-fade-up", style: { fontSize: 13, color: "var(--t4)", marginTop: 8, animationDelay: "0.4s" } },
+        `your top genre: `, e("span", { style: { color: "var(--ac-text)" } }, topGenre)
+      ),
+      games.length > 0 && e("div", {
+        className: "wr-fade-up",
         style: {
-          fontSize: 11, color: "var(--t3)", background: "var(--s2)",
-          border: "0.5px solid var(--b1)", borderRadius: 8, padding: 16,
-          overflowX: "auto", whiteSpace: "pre-wrap",
+          display: "flex", flexWrap: "wrap", gap: 8,
+          justifyContent: "center", marginTop: 28, maxWidth: 380,
+          animationDelay: "0.5s",
         },
-      }, JSON.stringify(data.current, null, 2))
+      },
+        ...games.map((g, i) =>
+          e("div", {
+            key: g.game_id || i,
+            className: "wr-pill-pop",
+            style: {
+              padding: "6px 12px", borderRadius: 8,
+              background: "var(--s2)", border: "0.5px solid var(--b1)",
+              fontSize: 12, color: "var(--t2)",
+              animationDelay: `${0.55 + i * 0.06}s`,
+            },
+          }, g.game_name || "")
+        )
+      )
     );
   }
 
