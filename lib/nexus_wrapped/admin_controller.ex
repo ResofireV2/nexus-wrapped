@@ -284,24 +284,20 @@ defmodule NexusWrapped.AdminController do
       ""
     end
 
+    # Use an HTML anchor with onclick for SPA navigation — markdown image-links
+    # get intercepted by Nexus's lightbox renderer and never produce a real <a> tag.
+    # onclick is in the DOMPurify allowlist so this survives sanitisation.
+    nav_script = "if(window._nexusNavigate){window._nexusNavigate('ext-route',window.NexusExtensions&&window.NexusExtensions.matchRoute('/wrapped/community/#{year}')||{});}else{window.location.href='#{wrapped_url}';}"
+    banner_html = "<a href=\"#{wrapped_url}\" onclick=\"#{nav_script}\"><img src=\"#{banner_url}\" alt=\"#{year} Community Wrapped\" width=\"680\"/></a>"
+
     """
     #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. Every post, every reply, every reaction — it all adds up to something genuinely special. This community exists because of you. 🙏
     #{teaser_section}
     ---
 
-    [![View the #{year} Community Wrapped](#{banner_url})](#{wrapped_url})
+    #{banner_html}
 
     ---
-
-    ## 📊 By the Numbers
-
-    | | |
-    |---|---|
-    | Total posts | **#{data["total_posts"]}** |
-    | Total replies | **#{data["total_replies"]}** |
-    | Reactions given | **#{data["total_reactions"]}** |
-    | New members | **#{data["new_members"]}** |
-    | Active members | **#{data["active_members"]}** |
 
     ## 🌟 Top Contributors
 
