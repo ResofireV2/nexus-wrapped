@@ -545,10 +545,9 @@ defmodule NexusWrapped.Generator do
   end
 
   defp gamepedia_available? do
-    # Check if Gamepedia's game_logs table exists in the database
     result =
       Repo.query!(
-        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'gamepedia_game_logs')",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'gamepedia_gamelogs')",
         []
       )
     [[exists]] = result.rows
