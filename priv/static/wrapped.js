@@ -699,7 +699,21 @@
   // REGISTRATIONS
   // =========================================================================
 
+  // ── Landing page route ────────────────────────────────────────────────────
+  // /wrapped — redirects to own profile Wrapped tab. Used by the explore item.
+  function WrappedLandingPage({ currentUser, navigate }) {
+    useEffect(() => {
+      if (currentUser && currentUser.username) {
+        navigate("profile", { username: currentUser.username, initialTab: "wrapped" });
+      }
+    }, []);
+    return e("div", {
+      style: { padding: "48px 0", textAlign: "center", color: "var(--t5)" },
+    }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 20 } }));
+  }
+
   // ── Route ─────────────────────────────────────────────────────────────────
+  NE.registerRoute("/wrapped", WrappedLandingPage, { title: "Wrapped" });
   NE.registerRoute("/wrapped/:year/:username", WrappedPage, { title: "Wrapped" });
 
   // ── Profile tab ───────────────────────────────────────────────────────────
@@ -735,15 +749,12 @@
   });
 
   // ── Explore item ──────────────────────────────────────────────────────────
-  // Appears in the left sidebar Explore section and the Layout admin drag list
   NE.registerExploreItem({
     id:       "wrapped",
     label:    "Wrapped",
     icon:     "fa-wand-sparkles",
     page:     "ext-route",
-    props:    NE.matchRoute(`/wrapped/${new Date().getFullYear()}/${
-      (() => { try { return JSON.parse(localStorage.getItem("nexus_user") || "{}").username || ""; } catch(_) { return ""; } })()
-    }`) || {},
+    props:    NE.matchRoute("/wrapped") || {},
     authOnly: true,
     priority: 60,
   });
