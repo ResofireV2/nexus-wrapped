@@ -783,6 +783,8 @@ defmodule NexusWrapped.Generator do
   def generate_community(year, settings \\ %{}) do
     from_date = Date.new!(year, 1, 1)
     to_date   = Date.new!(year, 12, 31)
+    prev_from = Date.new!(year - 1, 1, 1)
+    prev_to   = Date.new!(year - 1, 12, 31)
 
     # Forum-wide totals for the year
     total_posts =
@@ -920,18 +922,39 @@ defmodule NexusWrapped.Generator do
       |> Enum.into(%{})
       |> then(fn m -> Enum.map(1..12, fn month -> Map.get(m, month, 0) end) end)
 
+    # Previous year totals for YoY comparison in the banner
+    prev_total_posts =
+      Repo.aggregate(
+        from(p in "posts",
+          where: p.hidden == false
+            and fragment("?::date", p.inserted_at) >= ^prev_from
+            and fragment("?::date", p.inserted_at) <= ^prev_to
+        ), :count
+      ) || 0
+
+    prev_active_members =
+      Repo.one(
+        from p in "posts",
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^prev_from
+          and fragment("?::date", p.inserted_at) <= ^prev_to,
+        select: count(p.user_id, :distinct)
+      ) || 0
+
     %{
-      "year"              => year,
-      "total_posts"       => total_posts,
-      "total_replies"     => total_replies,
-      "new_members"       => new_members,
-      "active_members"    => active_members,
-      "total_reactions"   => total_reactions,
-      "top_posters"       => top_posters,
-      "top_spaces"        => top_spaces,
-      "most_discussed"    => most_discussed,
-      "most_reacted_post" => most_reacted_post,
-      "posts_per_month"   => posts_per_month,
+      "year"                => year,
+      "total_posts"         => total_posts,
+      "total_replies"       => total_replies,
+      "new_members"         => new_members,
+      "active_members"      => active_members,
+      "total_reactions"     => total_reactions,
+      "top_posters"         => top_posters,
+      "top_spaces"          => top_spaces,
+      "most_discussed"      => most_discussed,
+      "most_reacted_post"   => most_reacted_post,
+      "posts_per_month"     => posts_per_month,
+      "prev_total_posts"    => prev_total_posts,
+      "prev_active_members" => prev_active_members,
     }
   end
 
@@ -949,3 +972,141 @@ defmodule NexusWrapped.Generator do
     end)
   end
 end
+
+  # ── Community banner SVG ──────────────────────────────────────────────────
+
+  def generate_community_banner(data, settings) do
+    year       = data["year"]
+    forum_name = resolve_forum_name(settings)
+    {name_size, name_spacing} = name_font_params(forum_name)
+
+    # Compute percentage change labels from YoY data
+    posts_label    = yoy_label(data["total_posts"],   data["prev_total_posts"])
+    members_label  = yoy_label(data["active_members"], data["prev_active_members"])
+    reactions_label = format_count(data["total_reactions"] || 0)
+
+    posts_val    = format_count(data["total_posts"]    || 0)
+    members_val  = format_count(data["active_members"] || 0)
+
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="680" height="280" viewBox="0 0 680 280">
+      <rect width="680" height="280" rx="16" fill="#080810"/>
+
+      <line x1="340" y1="140" x2="100" y2="20"  stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="580" y2="20"  stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="40"  y2="140" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="640" y2="140" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="100" y2="260" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="580" y2="260" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="200" y2="20"  stroke="#f472b6" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="480" y2="20"  stroke="#f472b6" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="200" y2="260" stroke="#f472b6" stroke-width="1" opacity="0.12"/>
+      <line x1="340" y1="140" x2="480" y2="260" stroke="#f472b6" stroke-width="1" opacity="0.12"/>
+
+      <rect x="180" y="35"  width="7" height="19" rx="2" fill="#fbbf24" transform="rotate(30,183,44)"/>
+      <rect x="240" y="22"  width="6" height="17" rx="2" fill="#a78bfa" transform="rotate(-20,243,30)"/>
+      <rect x="320" y="18"  width="7" height="19" rx="2" fill="#f472b6" transform="rotate(10,323,27)"/>
+      <rect x="400" y="22"  width="6" height="17" rx="2" fill="#34d399" transform="rotate(-35,403,30)"/>
+      <rect x="460" y="32"  width="7" height="18" rx="2" fill="#60a5fa" transform="rotate(25,463,41)"/>
+      <rect x="80"  y="40"  width="6" height="17" rx="2" fill="#34d399" transform="rotate(-25,83,48)"/>
+      <rect x="590" y="38"  width="7" height="19" rx="2" fill="#a78bfa" transform="rotate(40,593,47)"/>
+      <rect x="60"  y="230" width="6" height="17" rx="2" fill="#f472b6" transform="rotate(20,63,238)"/>
+      <rect x="130" y="246" width="7" height="18" rx="2" fill="#60a5fa" transform="rotate(-30,133,255)"/>
+      <rect x="450" y="250" width="7" height="18" rx="2" fill="#fbbf24" transform="rotate(-10,453,259)"/>
+      <rect x="610" y="235" width="7" height="18" rx="2" fill="#34d399" transform="rotate(-22,613,244)"/>
+      <rect x="520" y="22"  width="6" height="17" rx="2" fill="#fbbf24" transform="rotate(-15,523,30)"/>
+      <rect x="220" y="250" width="5" height="13" rx="2" fill="#a78bfa" transform="rotate(30,222,256)"/>
+      <rect x="540" y="246" width="6" height="17" rx="2" fill="#f472b6" transform="rotate(35,543,254)"/>
+
+      <circle cx="145" cy="88"  r="2" fill="#fbbf24" opacity="0.7"/>
+      <circle cx="525" cy="72"  r="2" fill="#a78bfa" opacity="0.7"/>
+      <circle cx="88"  cy="175" r="2" fill="#f472b6" opacity="0.7"/>
+      <circle cx="592" cy="185" r="2" fill="#34d399" opacity="0.7"/>
+      <circle cx="210" cy="210" r="2" fill="#60a5fa" opacity="0.7"/>
+      <circle cx="468" cy="205" r="2" fill="#fbbf24" opacity="0.7"/>
+
+      <circle cx="340" cy="130" r="100" fill="#a78bfa" opacity="0.04"/>
+
+      <text x="340" y="76" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="#{name_size}" letter-spacing="#{name_spacing}"
+            fill="#5b4d8a">#{String.upcase(forum_name)}</text>
+
+      <text x="340" y="162" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="88" font-weight="700" letter-spacing="-3"
+            fill="#ffffff">#{year}</text>
+
+      <text x="340" y="192" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="16" letter-spacing="5"
+            fill="#a78bfa">WRAPPED</text>
+
+      <line x1="260" y1="198" x2="420" y2="198" stroke="#a78bfa" stroke-width="1.5" opacity="0.4"/>
+
+      <text x="170" y="232" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="20" font-weight="700" fill="#f472b6">#{posts_label}</text>
+      <text x="170" y="248" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="10" fill="#4a3a6a" letter-spacing="1">POSTS</text>
+
+      <text x="340" y="232" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="20" font-weight="700" fill="#fbbf24">#{members_label}</text>
+      <text x="340" y="248" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="10" fill="#4a3a6a" letter-spacing="1">MEMBERS</text>
+
+      <text x="510" y="232" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="20" font-weight="700" fill="#34d399">#{reactions_label}</text>
+      <text x="510" y="248" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="10" fill="#4a3a6a" letter-spacing="1">REACTIONS</text>
+
+      <line x1="250" y1="224" x2="250" y2="252" stroke="#1e1534" stroke-width="0.5"/>
+      <line x1="425" y1="224" x2="425" y2="252" stroke="#1e1534" stroke-width="0.5"/>
+
+      <rect x="246" y="260" width="188" height="14" rx="7" fill="#a78bfa" opacity="0.15"/>
+      <text x="340" y="271" text-anchor="middle"
+            font-family="system-ui,-apple-system,sans-serif"
+            font-size="10" fill="#a78bfa" letter-spacing="1">TAP TO SEE THE FULL STORY</text>
+    </svg>
+    """
+    |> String.trim()
+
+    svg
+  end
+
+  defp resolve_forum_name(settings) do
+    override = settings["forum_name_override"]
+    if override && String.trim(override) != "" do
+      String.trim(override)
+    else
+      case Nexus.Admin.get_setting("general") do
+        %{"site_name" => name} when is_binary(name) and name != "" -> name
+        _ -> "Nexus"
+      end
+    end
+  end
+
+  defp name_font_params(name) do
+    len = String.length(name)
+    cond do
+      len <= 20 -> {"12", "4"}
+      len <= 34 -> {"12", "2"}
+      true      -> {"11", "1"}
+    end
+  end
+
+  defp yoy_label(current, prev) when is_integer(current) and is_integer(prev) and prev > 0 do
+    pct = round((current - prev) / prev * 100)
+    sign = if pct >= 0, do: "+", else: ""
+    "#{sign}#{pct}%"
+  end
+  defp yoy_label(current, _prev), do: format_count(current || 0)
+
+  defp format_count(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
+  defp format_count(n) when n >= 1_000,     do: "#{Float.round(n / 1_000, 1)}K"
+  defp format_count(n),                     do: Integer.to_string(n)

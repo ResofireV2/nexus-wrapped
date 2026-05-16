@@ -153,9 +153,9 @@ defmodule NexusWrapped.AdminController do
   # ── POST /admin/community_post — generate community stats & post to forum ──
 
   def community_post(conn, params) do
-    admin  = conn.assigns.current_user
-    year   = parse_year(params["year"])
-    ext    = Nexus.Extensions.get_extension_by_slug("wrapped")
+    admin    = conn.assigns.current_user
+    year     = parse_year(params["year"])
+    ext      = Nexus.Extensions.get_extension_by_slug("wrapped")
     settings = if ext, do: ext.settings || %{}, else: %{}
 
     space_id = parse_space_id(params["space_id"] || settings["community_post_space_id"])
@@ -165,8 +165,15 @@ defmodule NexusWrapped.AdminController do
     else
       data = NexusWrapped.Generator.generate_community(year, settings)
 
-      # Build the markdown post body
-      body = build_community_post_body(data, year)
+      # Generate and save the banner SVG
+      svg_content = NexusWrapped.Generator.generate_community_banner(data, settings)
+      banner_url  = save_community_banner(svg_content, year)
+
+      # Build the community Wrapped route URL
+      wrapped_url = "/ext/wrapped/community/#{year}"
+
+      # Build the post body — thank you message, teaser stats, linked banner card
+      body = build_community_post_body(data, year, banner_url, wrapped_url, settings)
       title = "#{year} Community Wrapped 🎉"
 
       case Nexus.Forum.create_post(
@@ -175,19 +182,23 @@ defmodule NexusWrapped.AdminController do
         []
       ) do
         {:ok, post} ->
-          # Pin it to the space
-          Nexus.Forum.pin_post(post, true, "space")
+          # Pin globally — appears at the top of every space and the feed
+          Nexus.Forum.pin_post(post, true, "global")
 
-          # Persist the community result
+          # Persist community result
           now = DateTime.utc_now() |> DateTime.truncate(:second)
           case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
             nil ->
               %NexusWrapped.CommunityResult{}
-              |> NexusWrapped.CommunityResult.changeset(%{year: year, data: data, post_id: post.id, generated_at: now})
+              |> NexusWrapped.CommunityResult.changeset(%{
+                year: year, data: data, post_id: post.id, generated_at: now
+              })
               |> Repo.insert()
             existing ->
               existing
-              |> NexusWrapped.CommunityResult.changeset(%{data: data, post_id: post.id, generated_at: now})
+              |> NexusWrapped.CommunityResult.changeset(%{
+                data: data, post_id: post.id, generated_at: now
+              })
               |> Repo.update()
           end
 
@@ -227,10 +238,30 @@ defmodule NexusWrapped.AdminController do
     end
   end
 
-  defp build_community_post_body(data, year) do
+  defp save_community_banner(svg_content, year) do
+    Nexus.Extensions.Storage.ensure_dir("wrapped", "banners")
+    filename = "community-#{year}.svg"
+    path     = Nexus.Extensions.Storage.path("wrapped", "banners/#{filename}")
+    File.write!(path, svg_content)
+    Nexus.Extensions.Storage.url("wrapped", "banners/#{filename}")
+  end
+
+  defp build_community_post_body(data, year, banner_url, wrapped_url, settings) do
+    forum_name = case settings["forum_name_override"] do
+      name when is_binary(name) and name != "" -> String.trim(name)
+      _ ->
+        case Nexus.Admin.get_setting("general") do
+          %{"site_name" => n} when is_binary(n) and n != "" -> n
+          _ -> "our community"
+        end
+    end
+
     top_posters = data["top_posters"] || []
     top_spaces  = data["top_spaces"]  || []
     discussed   = data["most_discussed"]
+
+    # YoY teasers — only show if we have previous year data to compare
+    teasers = build_teasers(data)
 
     poster_lines = top_posters
       |> Enum.with_index(1)
@@ -241,26 +272,36 @@ defmodule NexusWrapped.AdminController do
       |> Enum.map(fn s -> "- **#{s["name"]}** — #{s["post_count"]} posts" end)
       |> Enum.join("\n")
 
-    discussed_line = if discussed do
-      "\n## 🏆 Most Discussed Thread\n[#{discussed["title"]}](/posts/#{discussed["id"]}) — #{discussed["reply_count"]} replies\n"
+    discussed_section = if discussed do
+      "\n## 🏆 Most Discussed Thread\n\n[#{discussed["title"]}](/posts/#{discussed["id"]}) — #{discussed["reply_count"]} replies\n"
+    else
+      ""
+    end
+
+    teaser_section = if teasers != "" do
+      "\n#{teasers}\n"
     else
       ""
     end
 
     """
-    # #{year} in Review 🎊
+    #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. Every post, every reply, every reaction — it all adds up to something genuinely special. This community exists because of you. 🙏
+    #{teaser_section}
+    ---
 
-    What a year it's been! Here's how our community did in #{year}.
+    [![View the #{year} Community Wrapped](#{banner_url})](#{wrapped_url})
+
+    ---
 
     ## 📊 By the Numbers
 
-    | Stat | Count |
-    |------|-------|
-    | Total posts | #{data["total_posts"]} |
-    | Total replies | #{data["total_replies"]} |
-    | Reactions given | #{data["total_reactions"]} |
-    | New members | #{data["new_members"]} |
-    | Active members | #{data["active_members"]} |
+    | | |
+    |---|---|
+    | Total posts | **#{data["total_posts"]}** |
+    | Total replies | **#{data["total_replies"]}** |
+    | Reactions given | **#{data["total_reactions"]}** |
+    | New members | **#{data["new_members"]}** |
+    | Active members | **#{data["active_members"]}** |
 
     ## 🌟 Top Contributors
 
@@ -269,12 +310,39 @@ defmodule NexusWrapped.AdminController do
     ## 🏠 Most Active Spaces
 
     #{space_lines}
-    #{discussed_line}
+    #{discussed_section}
     ---
-    *Individual Wrappeds are available on each member's profile — check yours in the Wrapped tab!*
+
+    *Your personal #{year} Wrapped is waiting on your profile — check the Wrapped tab to see your own year in review.*
     """
     |> String.trim()
   end
+
+  defp build_teasers(data) do
+    prev_posts   = data["prev_total_posts"]    || 0
+    prev_members = data["prev_active_members"] || 0
+    curr_posts   = data["total_posts"]         || 0
+    curr_members = data["active_members"]      || 0
+
+    lines =
+      [
+        yoy_teaser(curr_posts,   prev_posts,   "posts written",   "📝"),
+        yoy_teaser(curr_members, prev_members, "active members",  "👥"),
+      ]
+      |> Enum.filter(& &1)
+
+    Enum.join(lines, "\n")
+  end
+
+  defp yoy_teaser(current, prev, label, icon) when prev > 0 do
+    pct = round((current - prev) / prev * 100)
+    cond do
+      pct > 0  -> "#{icon} **#{pct}% more #{label}** than last year"
+      pct < 0  -> "#{icon} **#{abs(pct)}% fewer #{label}** than last year"
+      true     -> nil
+    end
+  end
+  defp yoy_teaser(_, _, _, _), do: nil
   defp parse_year(y) when is_integer(y), do: y
   defp parse_year(y) when is_binary(y),  do: String.to_integer(y)
 
