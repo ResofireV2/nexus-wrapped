@@ -510,20 +510,19 @@ defmodule NexusWrapped.Generator do
         :count
       )
 
+    # distinct with aggregate on a raw table name requires an explicit subquery
     unique_threads =
-      Repo.aggregate(
-        from(m in "messages",
-          where: m.user_id == ^user_id
-            and fragment("?::date", m.inserted_at) >= ^from_date
-            and fragment("?::date", m.inserted_at) <= ^to_date,
-          distinct: m.thread_id
-        ),
-        :count
+      Repo.one(
+        from m in "messages",
+        where: m.user_id == ^user_id
+          and fragment("?::date", m.inserted_at) >= ^from_date
+          and fragment("?::date", m.inserted_at) <= ^to_date,
+        select: count(m.thread_id, :distinct)
       )
 
     %{
-      "dms_sent"        => messages_sent,
-      "dm_threads_count"=> unique_threads,
+      "dms_sent"         => messages_sent,
+      "dm_threads_count" => unique_threads || 0,
     }
   end
 
