@@ -1580,16 +1580,22 @@
 
   // ── Account action ────────────────────────────────────────────────────────
   // "View My Wrapped" in the account dropdown — navigates to own profile Wrapped tab
-  NE.registerAccountAction({
-    id:    "wrapped-my-wrapped",
-    label: "My Wrapped",
-    icon:  "fa-wand-sparkles",
-    priority: 80,
-    onClick({ currentUser, navigate, close }) {
-      close();
-      navigate("profile", { username: currentUser.username, tab: "wrapped" });
-    },
-  });
+  // ── Account action — only visible in January ──────────────────────────────
+  // Wrapped is a once-a-year event. The dropdown entry only appears during
+  // January when users are most likely to have a new Wrapped waiting.
+  const _wrappedMonth = new Date().getMonth(); // 0 = January
+  if (_wrappedMonth === 0) {
+    NE.registerAccountAction({
+      id:    "wrapped-my-wrapped",
+      label: "My Wrapped",
+      icon:  "fa-wand-sparkles",
+      priority: 80,
+      onClick({ currentUser, navigate, close }) {
+        close();
+        navigate("profile", { username: currentUser.username, tab: "wrapped" });
+      },
+    });
+  }
 
   // ── User action ───────────────────────────────────────────────────────────
   // "View Wrapped" on another user's card popover — only if they've shared
@@ -1605,35 +1611,41 @@
     },
   });
 
-  // ── Explore item ──────────────────────────────────────────────────────────
-  NE.registerExploreItem({
-    id:       "wrapped",
-    label:    "Wrapped",
-    icon:     "fa-wand-sparkles",
-    page:     "ext-route",
-    props:    { _match: NE.matchRoute("/wrapped") },
-    authOnly: true,
-    priority: 60,
-  });
-
   // ── Notification type ─────────────────────────────────────────────────────
-  // Registered as "wrapped_ready" — this matches n.data.ext_type for renderBody.
-  // The notification icon and body text are shown in the notifications panel.
-  // Clicking marks it read; the user navigates to their Wrapped via the profile tab.
+  // Stored as type="extension", data.ext_type="wrapped_ready".
+  // renderBody is called for the notification list item body text.
+  // onClick navigates directly into the user's Wrapped slide deck.
   NE.registerNotificationType("wrapped_ready", {
     icon:      "fa-wand-sparkles",
     iconColor: "var(--ac)",
     renderBody(n) {
-      const year = n.data && n.data.year ? n.data.year : new Date().getFullYear();
-      return React.createElement(React.Fragment, null,
-        React.createElement("span", { style: { color: "var(--t2)", fontWeight: 500 } },
-          `Your ${year} Wrapped is ready`),
-        React.createElement("span", { style: { color: "var(--t4)" } },
-          " — see your year in review")
+      const year = n.data?.year || new Date().getFullYear();
+      return e(React.Fragment, null,
+        e("div", { style: { marginBottom: 3 } },
+          e("span", { style: { color: "var(--t1)", fontWeight: 600 } },
+            `✨ Your ${year} Wrapped is ready`
+          )
+        ),
+        e("div", { style: { fontSize: 12, color: "var(--t3)", lineHeight: 1.4 } },
+          "Your year in review is here — posts, streaks, reactions and more. Tap to see your story."
+        )
       );
     },
-    // No onClick: the notification click marks it read. The user opens Wrapped
-    // via the profile tab or the Explore sidebar item.
+    onClick({ n, navigate }) {
+      const year     = n.data?.year || new Date().getFullYear();
+      const username = n.data?.username;
+      if (username) {
+        const match = NE.matchRoute(`/wrapped/${year}/${username}`);
+        if (match && window._nexusNavigate) {
+          window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
+          return;
+        }
+      }
+      // Fallback: go to profile Wrapped tab
+      if (window._nexusNavigate) {
+        window._nexusNavigate("notifications");
+      }
+    },
   });
 
   // ── Admin panel ───────────────────────────────────────────────────────────

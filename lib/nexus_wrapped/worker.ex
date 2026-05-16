@@ -33,11 +33,20 @@ defmodule NexusWrapped.Worker do
     else
       case Generator.generate(user_id, year, settings) do
         {:ok, _result} ->
-          # Fire in-app notification
+          # Look up username for the notification data
+          username =
+            Nexus.Repo.one(
+              from u in "users",
+              where: u.id == ^user_id,
+              select: u.username
+            )
+
+          # Fire in-app notification with year and username so the frontend
+          # can navigate directly to /wrapped/:year/:username
           Nexus.Notifications.notify_extension(
             user_id,
             "wrapped_ready",
-            data: %{"year" => year}
+            data: %{"year" => year, "username" => username}
           )
 
           # Send notification email if setting enabled
