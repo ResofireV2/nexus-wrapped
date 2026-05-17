@@ -42,10 +42,14 @@ defmodule NexusWrapped.Worker do
             )
 
           # Fire in-app notification with year and username so the frontend
-          # can navigate directly to /wrapped/:year/:username
+          # can navigate directly to /wrapped/:year/:username.
+          # actor_id is set to user_id (self-notification) so the dedup check
+          # in DeliverNotification never matches a prior year's notification,
+          # which would have the same nil actor_id and silently drop the new one.
           Nexus.Notifications.notify_extension(
             user_id,
             "wrapped_ready",
+            actor_id: user_id,
             data: %{"year" => year, "username" => username}
           )
 

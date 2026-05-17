@@ -13,7 +13,7 @@ defmodule NexusWrapped.Mailer do
     gen       = general_settings()
     site_name = Map.get(gen, "site_name", "Nexus")
     base      = Nexus.Mailer.base_url()
-    url       = "#{base}/wrapped/#{year}/#{user.username}"
+    url       = "#{base}/ext/wrapped/#{year}/#{user.username}"
 
     subject   = "Your #{year} Wrapped is ready ✨"
     preview   = "See how your year on #{site_name} played out."

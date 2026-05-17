@@ -117,7 +117,40 @@ defmodule NexusWrapped.Scheduler do
       |> Oban.insert()
     end)
 
-    Logger.info("[NexusWrapped.Scheduler] Enqueued #{length(user_ids)} jobs for #{year}")
+    Logger.info("[NexusWrapped.Scheduler] Enqueued #{length(user_ids)} user jobs for #{year}")
+
+    # Generate community Wrapped automatically alongside individual Wrappeds
+    generate_community(year, settings)
+  end
+
+  defp generate_community(year, settings) do
+    try do
+      data = NexusWrapped.Generator.generate_community(year, settings)
+      now  = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      case Nexus.Repo.get_by(NexusWrapped.CommunityResult, year: year) do
+        nil ->
+          %NexusWrapped.CommunityResult{}
+          |> NexusWrapped.CommunityResult.changeset(%{
+            year:         year,
+            data:         data,
+            generated_at: now,
+          })
+          |> Nexus.Repo.insert()
+
+        existing ->
+          existing
+          |> NexusWrapped.CommunityResult.changeset(%{
+            data:         data,
+            generated_at: now,
+          })
+          |> Nexus.Repo.update()
+      end
+
+      Logger.info("[NexusWrapped.Scheduler] Community Wrapped generated for #{year}")
+    rescue
+      e -> Logger.error("[NexusWrapped.Scheduler] Community generation failed: #{inspect(e)}")
+    end
   end
 
   defp get_active_user_ids(year) do
