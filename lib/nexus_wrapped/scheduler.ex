@@ -93,11 +93,12 @@ defmodule NexusWrapped.Scheduler do
     date_match and hour_match and minute_match
   end
 
-  # True if at least one result has already been generated for this year,
-  # preventing duplicate runs if the scheduler fires multiple times in the hour.
+  # True if generation has already run for this year — prevents the scheduler
+  # from re-enqueueing on subsequent hourly ticks within the same trigger window.
+  # Uses the Result schema (wrapped_results table) so it catches any completed work.
   defp already_generated?(year) do
     Repo.exists?(
-      from r in "nexus_wrapped_results",
+      from r in NexusWrapped.Result,
       where: r.year == ^year
     )
   end
