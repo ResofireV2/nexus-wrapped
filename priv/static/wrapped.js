@@ -1684,10 +1684,59 @@
   }
 
   // ── Nav overlay ───────────────────────────────────────────────────────────
+  // ── useSwipe — Fancybox-matched swipe detection ───────────────────────────
+  // Mirrors Fancybox 5 Carousel thresholds exactly:
+  //   distance > containerWidth / 3  OR  velocity > 0.5 px/ms
+  // Direction lock: horizontal swipes only (|deltaX| must exceed |deltaY|).
+  // Returns { onTouchStart, onTouchEnd } to spread onto the slide container div.
+
+  function useSwipe(onPrev, onNext) {
+    const touch = useRef(null);
+
+    const onTouchStart = useCallback((ev) => {
+      const t = ev.touches[0];
+      touch.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+    }, []);
+
+    const onTouchEnd = useCallback((ev) => {
+      if (!touch.current) return;
+      const t       = ev.changedTouches[0];
+      const deltaX  = t.clientX - touch.current.x;
+      const deltaY  = t.clientY - touch.current.y;
+      const elapsed = Date.now() - touch.current.t;
+      touch.current = null;
+
+      // Ignore if primarily vertical (scroll intent)
+      if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+      // Ignore micro-movements (tap)
+      if (Math.abs(deltaX) < 10) return;
+
+      const velocity  = Math.abs(deltaX) / elapsed;          // px/ms
+      const threshold = (window.innerWidth || 375) / 3;      // Fancybox: 1/3 width
+      const triggered = Math.abs(deltaX) > threshold || velocity > 0.5;
+
+      if (!triggered) return;
+      if (deltaX < 0) onNext(); else onPrev();
+    }, [onPrev, onNext]);
+
+    return { onTouchStart, onTouchEnd };
+  }
+
+  // ── SlideNav ──────────────────────────────────────────────────────────────
   function SlideNav({ current, total, onPrev, onNext }) {
+    // On mobile (≤767px), Nexus's .mob-tabbar is fixed at the bottom with
+    // height calc(54px + env(safe-area-inset-bottom)). We push SlideNav up
+    // above it so it isn't covered. On desktop .mob-tabbar is display:none.
+    const isMobile = typeof window !== "undefined" &&
+      window.matchMedia("(max-width:767.99px)").matches;
+
+    const bottomOffset = isMobile
+      ? "calc(54px + env(safe-area-inset-bottom))"
+      : 0;
+
     return e("div", {
       style: {
-        position: "fixed", bottom: 0, left: 0, right: 0,
+        position: "fixed", bottom: bottomOffset, left: 0, right: 0,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "16px 24px",
         background: "var(--s1)", borderTop: "0.5px solid var(--b1)",
@@ -1790,16 +1839,16 @@
       );
     }
 
+    const onPrev = () => go(Math.max(0, current - 1));
+    const onNext = () => go(Math.min(slides.length - 1, current + 1));
+    const swipe  = useSwipe(onPrev, onNext);
+
     return e("div", {
       style: { position: "relative", minHeight: "100vh", background: "var(--bg)" },
+      ...swipe,
     },
       slides[current],
-      e(SlideNav, {
-        current,
-        total: slides.length,
-        onPrev: () => go(Math.max(0, current - 1)),
-        onNext: () => go(Math.min(slides.length - 1, current + 1)),
-      })
+      e(SlideNav, { current, total: slides.length, onPrev, onNext })
     );
   }
 
@@ -2590,14 +2639,16 @@
       e(CommSlideOutro,          { key: `c8-${key}`, d, year, currentUser, navigate }),
     ];
 
-    return e("div", { style: { position: "relative", minHeight: "100vh", background: "var(--bg)" } },
+    const onPrev = () => go(Math.max(0, current - 1));
+    const onNext = () => go(Math.min(slides.length - 1, current + 1));
+    const swipe  = useSwipe(onPrev, onNext);
+
+    return e("div", {
+      style: { position: "relative", minHeight: "100vh", background: "var(--bg)" },
+      ...swipe,
+    },
       slides[current],
-      e(SlideNav, {
-        current,
-        total: slides.length,
-        onPrev: () => go(Math.max(0, current - 1)),
-        onNext: () => go(Math.min(slides.length - 1, current + 1)),
-      })
+      e(SlideNav, { current, total: slides.length, onPrev, onNext })
     );
   }
 
