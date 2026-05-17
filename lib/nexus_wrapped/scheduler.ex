@@ -62,12 +62,13 @@ defmodule NexusWrapped.Scheduler do
            true               <- should_run_now?(target_date, gen_time, tz) do
         year = target_date.year
 
-        if already_generated?(year) do
-          :skip
-        else
+        # TODO: guard commented out for testing — re-enable and improve before release
+        # if already_generated?(year) do
+        #   :skip
+        # else
           Logger.info("[NexusWrapped.Scheduler] Auto-triggering generation for #{year}")
           enqueue_all(year, settings)
-        end
+        # end
       else
         _ -> :skip
       end
