@@ -824,11 +824,10 @@ defmodule NexusWrapped.Generator do
 
     active_members =
       Repo.one(
-        from p in "posts",
-        where: p.hidden == false
-          and fragment("?::date", p.inserted_at) >= ^from_date
-          and fragment("?::date", p.inserted_at) <= ^to_date,
-        select: count(p.user_id, :distinct)
+        from s in "user_daily_stats",
+        where: s.date >= ^from_date and s.date <= ^to_date
+          and (s.posts_count > 0 or s.replies_count > 0),
+        select: count(s.user_id, :distinct)
       ) || 0
 
     # ── Previous year totals (YoY comparisons) ────────────────────────────────
@@ -861,11 +860,10 @@ defmodule NexusWrapped.Generator do
 
     prev_active_members =
       Repo.one(
-        from p in "posts",
-        where: p.hidden == false
-          and fragment("?::date", p.inserted_at) >= ^prev_from
-          and fragment("?::date", p.inserted_at) <= ^prev_to,
-        select: count(p.user_id, :distinct)
+        from s in "user_daily_stats",
+        where: s.date >= ^prev_from and s.date <= ^prev_to
+          and (s.posts_count > 0 or s.replies_count > 0),
+        select: count(s.user_id, :distinct)
       ) || 0
 
     # ── Top contributors by combined post + reply count ───────────────────────

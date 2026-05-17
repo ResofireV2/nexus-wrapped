@@ -1902,20 +1902,20 @@
       e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 28, textTransform: "uppercase" } },
         "by the numbers"
       ),
-      e("div", { style: { display: "flex", flexDirection: "column", gap: 20, width: "100%", maxWidth: 380 } },
+      e("div", { style: { display: "flex", flexDirection: "column", gap: 24, width: "100%", maxWidth: 320, alignItems: "center" } },
         ...stats.map((s, i) =>
           e("div", {
             key: s.label,
             className: "wr-fade-up",
-            style: { animationDelay: `${0.1 + i * 0.12}s` },
+            style: { animationDelay: `${0.1 + i * 0.12}s`, width: "100%", textAlign: "center" },
           },
-            e("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" } },
-              e("div", { className: "wr-count-pop", style: { fontSize: 48, fontWeight: 700, color: s.color, lineHeight: 1, letterSpacing: -2, animationDelay: `${0.15 + i * 0.12}s` } },
+            e("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", justifyContent: "center" } },
+              e("div", { className: "wr-count-pop", style: { fontSize: 56, fontWeight: 700, color: s.color, lineHeight: 1, letterSpacing: -2, animationDelay: `${0.15 + i * 0.12}s` } },
                 e(AnimCounter, { target: s.val || 0, duration: 1000, delay: 200 + i * 120 })
               ),
               e(YoYBadge, { current: s.val || 0, prev: s.prev || 0 })
             ),
-            e("div", { style: { fontSize: 13, color: "var(--t4)", marginTop: 2 } }, s.label)
+            e("div", { style: { fontSize: 12, color: "var(--t4)", marginTop: 3, letterSpacing: 1, textTransform: "uppercase" } }, s.label)
           )
         )
       )
