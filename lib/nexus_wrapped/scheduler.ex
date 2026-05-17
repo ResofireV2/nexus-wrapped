@@ -22,6 +22,10 @@ defmodule NexusWrapped.Scheduler do
 
   @impl true
   def init(_) do
+    # Ensure all settings have their defaults written to the database.
+    # Handles both fresh installs (on_install covers those) and existing installs
+    # that predate a newly added setting key.
+    NexusWrapped.ensure_defaults()
     schedule_check()
     {:ok, %{}}
   end

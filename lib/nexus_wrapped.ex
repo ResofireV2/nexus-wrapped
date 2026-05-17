@@ -73,4 +73,36 @@ defmodule NexusWrapped do
   # throughout Nexus core (e.g. %{post_id: id}, %{user_id: id}).
   @impl true
   def handle_event(_event, _payload, _settings), do: :ok
+
+  # Write default settings on fresh install. Only fills in keys that are
+  # not already present — safe to call on existing installs too.
+  @impl true
+  def on_install(_current_settings) do
+    ensure_defaults()
+    :ok
+  end
+
+  @doc """
+  Writes any missing settings defaults for this extension.
+  Called on install and from the Scheduler on startup so existing installs
+  that predate a new setting get the correct default written to the database.
+  """
+  def ensure_defaults do
+    ext = Nexus.Extensions.get_extension_by_slug("wrapped")
+    if ext do
+      current  = ext.settings || %{}
+      defaults = Enum.reduce(settings_schema(), %{}, fn {key, field}, acc ->
+        case Map.get(field, "default") do
+          nil -> acc
+          val -> Map.put(acc, key, val)
+        end
+      end)
+      # Only write keys that are genuinely missing (nil means never set)
+      missing = Enum.reject(defaults, fn {k, _v} -> Map.has_key?(current, k) end)
+      if missing != [] do
+        patch = Map.new(missing)
+        Nexus.Extensions.update_extension_settings(ext, patch)
+      end
+    end
+  end
 end
