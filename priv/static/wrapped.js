@@ -1800,6 +1800,13 @@
       setKey(k => k + 1);
     };
 
+    // Hooks must be called unconditionally — before any early returns.
+    // onPrev/onNext are stable references; slides.length is only used in the
+    // ready branch so we cap at 0 safely here.
+    const onPrev = useCallback(() => setCurrent(c => Math.max(0, c - 1)), []);
+    const onNext = useCallback(() => setCurrent(c => c + 1), []);
+    const swipe  = useSwipe(onPrev, onNext);
+
     if (state.status === "loading") return e("div", {
       style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
     }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 24, color: "var(--ac)" } }));
@@ -1839,16 +1846,21 @@
       );
     }
 
-    const onPrev = () => go(Math.max(0, current - 1));
-    const onNext = () => go(Math.min(slides.length - 1, current + 1));
-    const swipe  = useSwipe(onPrev, onNext);
+    // Wrap the hook callbacks to also fire setKey for slide animation reset
+    const onPrevNav = () => { onPrev(); setKey(k => k + 1); };
+    const onNextNav = (len) => { if (current < len - 1) { onNext(); setKey(k => k + 1); } };
 
     return e("div", {
       style: { position: "relative", minHeight: "100vh", background: "var(--bg)" },
       ...swipe,
     },
       slides[current],
-      e(SlideNav, { current, total: slides.length, onPrev, onNext })
+      e(SlideNav, {
+        current,
+        total: slides.length,
+        onPrev: onPrevNav,
+        onNext: () => onNextNav(slides.length),
+      })
     );
   }
 
@@ -2606,6 +2618,11 @@
 
     const go = (n) => { setCurrent(n); setKey(k => k + 1); };
 
+    // Hooks must be called unconditionally — before any early returns.
+    const onPrev = useCallback(() => setCurrent(c => Math.max(0, c - 1)), []);
+    const onNext = useCallback(() => setCurrent(c => c + 1), []);
+    const swipe  = useSwipe(onPrev, onNext);
+
     if (state.status === "loading") return e("div", {
       style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
     }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 24, color: "var(--ac)" } }));
@@ -2639,16 +2656,20 @@
       e(CommSlideOutro,          { key: `c8-${key}`, d, year, currentUser, navigate }),
     ];
 
-    const onPrev = () => go(Math.max(0, current - 1));
-    const onNext = () => go(Math.min(slides.length - 1, current + 1));
-    const swipe  = useSwipe(onPrev, onNext);
+    const onPrevNav = () => { onPrev(); setKey(k => k + 1); };
+    const onNextNav = (len) => { if (current < len - 1) { onNext(); setKey(k => k + 1); } };
 
     return e("div", {
       style: { position: "relative", minHeight: "100vh", background: "var(--bg)" },
       ...swipe,
     },
       slides[current],
-      e(SlideNav, { current, total: slides.length, onPrev, onNext })
+      e(SlideNav, {
+        current,
+        total: slides.length,
+        onPrev: onPrevNav,
+        onNext: () => onNextNav(slides.length),
+      })
     );
   }
 
