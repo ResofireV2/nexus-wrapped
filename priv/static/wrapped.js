@@ -1154,6 +1154,13 @@
 
   // ── Slide shell ───────────────────────────────────────────────────────────
   function Slide({ children, style = {} }) {
+    const isMobile = typeof window !== "undefined" &&
+      window.matchMedia("(max-width:767.99px)").matches;
+
+    const paddingBottom = isMobile
+      ? "calc(54px + env(safe-area-inset-bottom) + 24px)"
+      : "80px";
+
     return e("div", {
       style: {
         position: "relative",
@@ -1162,7 +1169,10 @@
         flexDirection: "column",
         justifyContent: "center",
         alignItems: "center",
-        padding: "80px 32px 100px",
+        paddingTop: "60px",
+        paddingBottom,
+        paddingLeft: "32px",
+        paddingRight: "32px",
         textAlign: "center",
         background: "var(--bg)",
         overflow: "hidden",
@@ -1368,7 +1378,12 @@
       ),
       breakdown.length > 0 && e("div", {
         className: "wr-fade-up",
-        style: { display: "flex", gap: 12, marginTop: 36, justifyContent: "center", animationDelay: "0.45s" },
+        style: {
+          display: "flex", flexWrap: "wrap", gap: 10,
+          marginTop: 36, justifyContent: "center",
+          maxWidth: 320,
+          animationDelay: "0.45s",
+        },
       },
         ...breakdown.map((item, i) =>
           e("div", {
@@ -1376,7 +1391,7 @@
             className: "wr-pill-pop",
             style: {
               display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              padding: "12px 16px", borderRadius: 12,
+              padding: "10px 14px", borderRadius: 12,
               background: "var(--s2)", border: "0.5px solid var(--b1)",
               animationDelay: `${0.5 + i * 0.07}s`,
             },
