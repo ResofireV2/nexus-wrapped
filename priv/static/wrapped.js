@@ -141,7 +141,7 @@
 
   // ── Generation tab ────────────────────────────────────────────────────────
 
-  function GenerationTab() {
+  function GenerationTab({ settings, setSetting }) {
     const currentYear = new Date().getFullYear();
     const [year, setYear]               = useState(String(currentYear));
     const [status, setStatus]           = useState(null);
@@ -160,18 +160,7 @@
     const [communityError, setCommunityError]     = useState(null);
     const [communityResult, setCommunityResult]   = useState(null);
 
-    // Schedule state
-    const [schedDate, setSchedDate]   = useState("");
-    const [schedTime, setSchedTime]   = useState("09:00");
-    const [schedTz,   setSchedTz]     = useState("UTC");
-    const [schedSaving, setSchedSaving] = useState(false);
-    const [schedSaved,  setSchedSaved]  = useState(false);
-
-    // Message editor state
-    const [msgText,   setMsgText]   = useState("");
-    const [msgSaving, setMsgSaving] = useState(false);
-    const [msgSaved,  setMsgSaved]  = useState(false);
-    const [msgLoaded, setMsgLoaded] = useState(false);
+    const pollRef = useRef(null);
 
     const defaultMsg = [
       "What a year, [forum_name].",
@@ -180,8 +169,6 @@
       "",
       "This is your year in review.",
     ].join("\n");
-
-    const pollRef = useRef(null);
 
     const loadStatus = useCallback(() => {
       if (!year) return;
@@ -210,17 +197,6 @@
         .then(d => { if (d.data) setCommunityStatus(d.data); })
         .catch(() => {});
     }, [year]);
-
-    // Load schedule and message settings on mount
-    useEffect(() => {
-      loadExtSettings().then(s => {
-        if (s.auto_generate_date)     setSchedDate(s.auto_generate_date);
-        if (s.auto_generate_time)     setSchedTime(s.auto_generate_time);
-        if (s.auto_generate_timezone) setSchedTz(s.auto_generate_timezone);
-        setMsgText(s.intro_message || "");
-        setMsgLoaded(true);
-      });
-    }, []);
 
     useEffect(() => {
       if (status && status.pending > 0 && !pollRef.current) {
@@ -276,29 +252,6 @@
         .finally(() => setCommunityLoading(false));
     };
 
-    const saveSchedule = async () => {
-      setSchedSaving(true); setSchedSaved(false);
-      const ok = await saveSettings({
-        auto_generate_date:     schedDate,
-        auto_generate_time:     schedTime,
-        auto_generate_timezone: schedTz,
-      });
-      setSchedSaving(false);
-      if (ok) { setSchedSaved(true); setTimeout(() => setSchedSaved(false), 2500); }
-    };
-
-    const saveMessage = async () => {
-      setMsgSaving(true); setMsgSaved(false);
-      const ok = await saveSettings({ intro_message: msgText });
-      setMsgSaving(false);
-      if (ok) { setMsgSaved(true); setTimeout(() => setMsgSaved(false), 2500); }
-    };
-
-    const resetMessage = async () => {
-      setMsgText("");
-      await saveSettings({ intro_message: "" });
-    };
-
     const progressPct = status ? Math.min(100, status.pct_complete || 0) : 0;
     const isRunning   = status && status.pending > 0;
 
@@ -333,12 +286,45 @@
           "Wrapped will be automatically generated for all eligible members at the date and time you set. " +
           "The manual buttons below can be used to run it early or re-trigger if something goes wrong."
         ),
+
+        // Widget hide date
+        e("div", { style: { marginBottom: 16 } },
+          e("div", { style: labelStyle }, "Hide community widget after (YYYY-MM-DD)"),
+          e("input", {
+            type: "date", className: "fi",
+            value: settings.widget_hide_after || "",
+            onChange: ev => setSetting("widget_hide_after", ev.target.value),
+            style: { maxWidth: 220 },
+          }),
+          e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 4 } },
+            "The sidebar widget disappears after this date. Leave blank to keep it visible indefinitely."
+          )
+        ),
+
+        // Default community post space
+        e("div", { style: { marginBottom: 20 } },
+          e("div", { style: labelStyle }, "Community post space (default)"),
+          e("select", {
+            className: "fi",
+            value: settings.community_post_space_id || "",
+            onChange: ev => setSetting("community_post_space_id", ev.target.value ? Number(ev.target.value) : null),
+            style: { maxWidth: 260 },
+          },
+            e("option", { value: "" }, "Select a space…"),
+            ...spaces.map(s => e("option", { key: s.id, value: s.id }, s.name))
+          ),
+          e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 4 } },
+            "Default space for the optional community post. Can be overridden below."
+          )
+        ),
+
         e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" } },
           e("div", { style: { marginBottom: 16 } },
             e("div", { style: labelStyle }, "Date"),
             e("input", {
               type: "date", className: "fi",
-              value: schedDate, onChange: ev => setSchedDate(ev.target.value),
+              value: settings.auto_generate_date || "",
+              onChange: ev => setSetting("auto_generate_date", ev.target.value),
               style: { width: "100%" },
             })
           ),
@@ -346,7 +332,8 @@
             e("div", { style: labelStyle }, "Time"),
             e("input", {
               type: "time", className: "fi",
-              value: schedTime, onChange: ev => setSchedTime(ev.target.value),
+              value: settings.auto_generate_time || "09:00",
+              onChange: ev => setSetting("auto_generate_time", ev.target.value),
               style: { width: "100%" },
             })
           ),
@@ -354,7 +341,8 @@
             e("div", { style: labelStyle }, "Timezone"),
             e("select", {
               className: "fi",
-              value: schedTz, onChange: ev => setSchedTz(ev.target.value),
+              value: settings.auto_generate_timezone || "UTC",
+              onChange: ev => setSetting("auto_generate_timezone", ev.target.value),
               style: { width: "100%" },
             },
               ...TIMEZONES.map(g =>
@@ -366,16 +354,7 @@
               )
             )
           )
-        ),
-        e("button", {
-          onClick: saveSchedule, disabled: schedSaving,
-          style: {
-            fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
-            fontWeight: 500, cursor: schedSaving ? "default" : "pointer",
-            opacity: schedSaving ? 0.6 : 1,
-            background: "var(--ac)", border: "none", color: "var(--ac-on)",
-          },
-        }, schedSaving ? "Saving…" : schedSaved ? "✓ Saved" : "Save Schedule")
+        )
       ),
 
       // ── Year selector ───────────────────────────────────────────────────
@@ -507,11 +486,11 @@
           )
         ),
 
-        // Textarea
-        msgLoaded && e("textarea", {
+        // Textarea — uses settings.intro_message from shared state
+        e("textarea", {
           className: "fi",
-          value: msgText || "",
-          onChange: ev => setMsgText(ev.target.value),
+          value: settings.intro_message || "",
+          onChange: ev => setSetting("intro_message", ev.target.value),
           placeholder: defaultMsg,
           rows: 8,
           style: {
@@ -520,18 +499,9 @@
           },
         }),
 
-        e("div", { style: { display: "flex", gap: 10, alignItems: "center", marginTop: 10 } },
+        e("div", { style: { marginTop: 8 } },
           e("button", {
-            onClick: saveMessage, disabled: msgSaving,
-            style: {
-              fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
-              fontWeight: 500, cursor: msgSaving ? "default" : "pointer",
-              opacity: msgSaving ? 0.6 : 1,
-              background: "var(--ac)", border: "none", color: "var(--ac-on)",
-            },
-          }, msgSaving ? "Saving…" : msgSaved ? "✓ Saved" : "Save Message"),
-          e("button", {
-            onClick: resetMessage,
+            onClick: () => setSetting("intro_message", ""),
             style: {
               fontSize: 12, padding: "7px 14px", borderRadius: 8, fontFamily: "inherit",
               cursor: "pointer", background: "none",
@@ -666,8 +636,88 @@
     };
   }
 
+  // ── Shared admin field components ─────────────────────────────────────────
+
+  function AdminToggle({ value, onChange }) {
+    return e("div", {
+      onClick: () => onChange(!value),
+      style: {
+        width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+        background: value ? "var(--ac)" : "rgba(255,255,255,0.15)",
+        position: "relative", transition: "background 0.2s", flexShrink: 0,
+      },
+    },
+      e("div", {
+        style: {
+          position: "absolute", top: 2, left: value ? 18 : 2,
+          width: 16, height: 16, borderRadius: "50%",
+          background: "white", transition: "left 0.2s",
+        },
+      })
+    );
+  }
+
+  function AdminField({ label, hint, children }) {
+    return e("div", { style: { marginBottom: 18 } },
+      e("div", { style: { fontSize: 12, fontWeight: 500, color: "var(--t4)", marginBottom: 6 } }, label),
+      children,
+      hint && e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 4, lineHeight: 1.5 } }, hint)
+    );
+  }
+
+  function AdminToggleField({ label, hint, value, onChange }) {
+    return e(AdminField, { label, hint },
+      e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        e(AdminToggle, { value: !!value, onChange })
+      )
+    );
+  }
+
+  // ── WrappedAdminPanel — unified settings state ────────────────────────────
+  // All settings (schedule, message, visibility, content, notifications) live in
+  // one state object. One save fn is registered with _nexusAdminSaveFn so the
+  // top-bar Save Changes button handles everything consistently.
+
   function WrappedAdminPanel() {
-    const [activeTab, setActiveTab] = useState("generation");
+    const [activeTab, setActiveTab]   = useState("generation");
+    const [settings,  setSettings]    = useState({});
+    const [loaded,    setLoaded]      = useState(false);
+
+    // Load all extension settings on mount
+    useEffect(() => {
+      loadExtSettings().then(s => {
+        setSettings(s);
+        setLoaded(true);
+      });
+    }, []);
+
+    // Update one setting key and signal dirty to the top bar
+    const setSetting = useCallback((key, val) => {
+      setSettings(prev => ({ ...prev, [key]: val }));
+      if (window._nexusAdminSetDirty) window._nexusAdminSetDirty();
+    }, []);
+
+    // The single save fn — PATCHes all settings at once via the core API
+    const save = useCallback(async () => {
+      const ok = await saveSettings(settings);
+      return ok;
+    }, [settings]);
+
+    // Register save fn with the top-bar Save Changes button.
+    // Re-registers whenever settings change so save() always closes over latest state.
+    useEffect(() => {
+      if (!loaded) return;
+      window._nexusAdminSaveFn = save;
+      return () => {
+        if (window._nexusAdminSaveFn === save) window._nexusAdminSaveFn = null;
+      };
+    }, [loaded, save]);
+
+    if (!loaded) return e("div", {
+      style: { padding: "48px 0", textAlign: "center", color: "var(--t5)" },
+    }, e("i", { className: "fa-solid fa-spinner fa-spin" }));
+
+    const s = settings;
 
     return e("div", null,
       // Tab bar
@@ -690,19 +740,67 @@
         )
       ),
 
-      // Generation tab: settings fields (widget_hide_after, community_post_space_id)
-      // rendered via SimpleSettingsPanel, followed by the custom action buttons below.
-      activeTab === "generation" && e("div", null,
-        e(NET.SimpleSettingsPanel, { slug: "wrapped", fields: TAB_FIELDS.generation }),
-        e("div", { style: { borderTop: "0.5px solid var(--b1)", marginTop: 24, paddingTop: 24 } },
-          e(GenerationTab)
+      // Generation tab — schedule, generate actions, message editor
+      activeTab === "generation" && e(GenerationTab, { settings: s, setSetting }),
+
+      // Visibility tab
+      activeTab === "visibility" && e("div", null,
+        e(AdminToggleField, {
+          label: "Enable Wrapped", value: s.enabled,
+          onChange: v => setSetting("enabled", v),
+        }),
+        e(AdminToggleField, {
+          label: "Share by default", value: s.sharing_default,
+          onChange: v => setSetting("sharing_default", v),
+        }),
+        e(AdminField, { label: "Minimum posts to qualify" },
+          e("input", {
+            type: "number", className: "fi",
+            value: s.min_posts_threshold ?? 5,
+            onChange: ev => setSetting("min_posts_threshold", Number(ev.target.value)),
+            style: { maxWidth: 120 },
+            min: 0,
+          })
         )
       ),
 
-      activeTab !== "generation" && TAB_FIELDS[activeTab] && e(NET.SimpleSettingsPanel, {
-        slug:   "wrapped",
-        fields: TAB_FIELDS[activeTab],
-      })
+      // Content tab
+      activeTab === "content" && e("div", null,
+        e(AdminField, {
+          label: "Forum name override",
+          hint:  "Overrides the site name used in banners and messages. Leave blank to use the site name from General settings.",
+        },
+          e("input", {
+            type: "text", className: "fi",
+            value: s.forum_name_override || "",
+            onChange: ev => setSetting("forum_name_override", ev.target.value),
+            placeholder: "e.g. Nexus Forum",
+            style: { maxWidth: 360 },
+          })
+        ),
+        e(AdminToggleField, {
+          label: "Show Gamepedia slide",
+          hint:  "Includes a slide showing the user's top games if they have Gamepedia activity.",
+          value: s.show_gamepedia_slide,
+          onChange: v => setSetting("show_gamepedia_slide", v),
+        }),
+        e(AdminToggleField, {
+          label: "Show DMs slide",
+          hint:  "Includes a slide with direct message stats.",
+          value: s.show_dms_slide,
+          onChange: v => setSetting("show_dms_slide", v),
+        })
+      ),
+
+      // Notifications tab
+      activeTab === "notifications" && e("div", null,
+        e(AdminToggleField, {
+          label: "Send notification email when ready",
+          hint:  "Sends each member an email when their personal Wrapped is ready to view.",
+          value: s.send_notification_email,
+          onChange: v => setSetting("send_notification_email", v),
+        })
+      )
     );
   }
 
