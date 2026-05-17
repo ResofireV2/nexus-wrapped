@@ -1,11 +1,14 @@
 defmodule NexusWrapped.Scheduler do
   @moduledoc """
-  Hourly GenServer that auto-triggers Wrapped generation when the admin's
-  configured date and time (in their chosen timezone) is reached.
+  Minute-resolution GenServer that auto-triggers Wrapped generation when the
+  admin's configured date and time (in their chosen timezone) is reached.
 
-  Pattern mirrors Nexus's own digest scheduler: the cron fires frequently,
-  a lightweight guard function checks whether the moment has arrived, and
-  the actual work is handed off to Oban so it runs exactly once.
+  Wakes up at the top of every minute by calculating the exact milliseconds
+  until the next minute boundary — so if you configure 11:00am, the scheduler
+  fires at precisely 11:00am regardless of when the server last restarted.
+
+  Pattern mirrors Nexus's own digest scheduler: a lightweight guard checks
+  whether the moment has arrived, and the actual work is handed off to Oban.
   """
 
   use GenServer
@@ -14,17 +17,12 @@ defmodule NexusWrapped.Scheduler do
 
   alias Nexus.Repo
 
-  @check_interval :timer.minutes(60)
-
   # ── Supervision ────────────────────────────────────────────────────────────
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
   @impl true
   def init(_) do
-    # Ensure all settings have their defaults written to the database.
-    # Handles both fresh installs (on_install covers those) and existing installs
-    # that predate a newly added setting key.
     NexusWrapped.ensure_defaults()
     schedule_check()
     {:ok, %{}}
@@ -47,14 +45,13 @@ defmodule NexusWrapped.Scheduler do
   # ── Core logic ────────────────────────────────────────────────────────────
 
   defp maybe_generate do
-    ext = Nexus.Extensions.get_extension_by_slug("wrapped")
+    ext      = Nexus.Extensions.get_extension_by_slug("wrapped")
     settings = if ext, do: ext.settings || %{}, else: %{}
 
     gen_date = settings["auto_generate_date"]
     gen_time = settings["auto_generate_time"] || "09:00"
     tz       = settings["auto_generate_timezone"] || "UTC"
 
-    # Nothing configured — nothing to do
     if is_nil(gen_date) or gen_date == "" do
       :skip
     else
@@ -75,8 +72,8 @@ defmodule NexusWrapped.Scheduler do
     end
   end
 
-  # True when the current moment (in the admin's timezone) matches the
-  # configured date and falls within the configured hour window.
+  # Matches only the exact configured minute — not >= — so we fire once at
+  # the configured moment, not every minute for the rest of that hour.
   defp should_run_now?(target_date, gen_time, tz) do
     [h_str, m_str] = String.split(gen_time, ":")
     target_hour   = String.to_integer(h_str)
@@ -89,18 +86,11 @@ defmodule NexusWrapped.Scheduler do
         _ -> DateTime.utc_now()
       end
 
-    date_match   = DateTime.to_date(now_local) == target_date
-    hour_match   = now_local.hour == target_hour
-    # Allow a 59-minute window within the configured hour so a missed tick
-    # (e.g. restart during that hour) still fires.
-    minute_match = now_local.minute >= target_minute
-
-    date_match and hour_match and minute_match
+    DateTime.to_date(now_local) == target_date  and
+      now_local.hour   == target_hour            and
+      now_local.minute == target_minute
   end
 
-  # True if generation has already run for this year — prevents the scheduler
-  # from re-enqueueing on subsequent hourly ticks within the same trigger window.
-  # Uses the Result schema (wrapped_results table) so it catches any completed work.
   defp already_generated?(year) do
     Repo.exists?(
       from r in NexusWrapped.Result,
@@ -111,15 +101,16 @@ defmodule NexusWrapped.Scheduler do
   defp enqueue_all(year, settings) do
     user_ids = get_active_user_ids(year)
 
-    Enum.each(user_ids, fn user_id ->
-      %{"user_id" => user_id, "year" => year}
-      |> NexusWrapped.Worker.new()
-      |> Oban.insert()
+    # Build all changesets then insert in one bulk operation — far more
+    # efficient than individual Oban.insert/1 calls for large forums.
+    jobs = Enum.map(user_ids, fn user_id ->
+      NexusWrapped.Worker.new(%{"user_id" => user_id, "year" => year})
     end)
+
+    Oban.insert_all(jobs)
 
     Logger.info("[NexusWrapped.Scheduler] Enqueued #{length(user_ids)} user jobs for #{year}")
 
-    # Generate community Wrapped automatically alongside individual Wrappeds
     generate_community(year, settings)
   end
 
@@ -128,7 +119,7 @@ defmodule NexusWrapped.Scheduler do
       data = NexusWrapped.Generator.generate_community(year, settings)
       now  = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      case Nexus.Repo.get_by(NexusWrapped.CommunityResult, year: year) do
+      case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
         nil ->
           %NexusWrapped.CommunityResult{}
           |> NexusWrapped.CommunityResult.changeset(%{
@@ -136,7 +127,7 @@ defmodule NexusWrapped.Scheduler do
             data:         data,
             generated_at: now,
           })
-          |> Nexus.Repo.insert()
+          |> Repo.insert()
 
         existing ->
           existing
@@ -144,7 +135,7 @@ defmodule NexusWrapped.Scheduler do
             data:         data,
             generated_at: now,
           })
-          |> Nexus.Repo.update()
+          |> Repo.update()
       end
 
       Logger.info("[NexusWrapped.Scheduler] Community Wrapped generated for #{year}")
@@ -166,5 +157,12 @@ defmodule NexusWrapped.Scheduler do
     )
   end
 
-  defp schedule_check, do: Process.send_after(self(), :check, @check_interval)
+  # Sleep until the top of the next minute by computing exact milliseconds
+  # to the next minute boundary. This synchronizes the scheduler to wall
+  # clock time so an 11:00am trigger always fires at 11:00am precisely.
+  defp schedule_check do
+    now_ms   = System.os_time(:millisecond)
+    next_min = (div(now_ms, 60_000) + 1) * 60_000
+    Process.send_after(self(), :check, next_min - now_ms)
+  end
 end

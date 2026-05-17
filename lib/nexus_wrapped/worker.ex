@@ -11,7 +11,7 @@ defmodule NexusWrapped.Worker do
   """
 
   use Oban.Worker,
-    queue: :default,
+    queue: :extensions,
     max_attempts: 3,
     unique: [period: 60, fields: [:args], keys: [:user_id, :year]]
 
