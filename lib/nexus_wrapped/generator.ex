@@ -867,7 +867,6 @@ defmodule NexusWrapped.Generator do
       ) || 0
 
     # ── Top contributors by combined post + reply count ───────────────────────
-    # Driven from user_daily_stats to avoid a heavy posts+replies union.
 
     top_contributors =
       Repo.all(
@@ -900,10 +899,10 @@ defmodule NexusWrapped.Generator do
         order_by: [desc: coalesce(sum(s.reactions_received), 0)],
         limit: 5,
         select: %{
-          user_id:           u.id,
-          username:          u.username,
-          avatar_url:        u.avatar_url,
-          avatar_color:      u.avatar_color,
+          user_id:            u.id,
+          username:           u.username,
+          avatar_url:         u.avatar_url,
+          avatar_color:       u.avatar_color,
           reactions_received: coalesce(sum(s.reactions_received), 0),
         }
       )
@@ -920,10 +919,10 @@ defmodule NexusWrapped.Generator do
         order_by: [desc: coalesce(sum(s.reactions_given), 0)],
         limit: 5,
         select: %{
-          user_id:        u.id,
-          username:       u.username,
-          avatar_url:     u.avatar_url,
-          avatar_color:   u.avatar_color,
+          user_id:         u.id,
+          username:        u.username,
+          avatar_url:      u.avatar_url,
+          avatar_color:    u.avatar_color,
           reactions_given: coalesce(sum(s.reactions_given), 0),
         }
       )
