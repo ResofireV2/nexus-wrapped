@@ -2662,20 +2662,6 @@
     });
   }
 
-  // ── User action ───────────────────────────────────────────────────────────
-  // "View Wrapped" on another user's card popover — only if they've shared
-  NE.registerUserAction({
-    id:       "wrapped-view",
-    label:    "View Wrapped",
-    icon:     "fa-wand-sparkles",
-    priority: 80,
-    authOnly: false,
-    onClick({ user, navigate, closeCard }) {
-      closeCard();
-      navigate("profile", { username: user.username, tab: "wrapped" });
-    },
-  });
-
   // ── Notification type ─────────────────────────────────────────────────────
   // NotificationsPage calls getNotifType(n.type) for onClick — n.type is
   // "extension" for all extension notifications. renderBody correctly does a
