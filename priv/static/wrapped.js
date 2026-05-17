@@ -79,7 +79,7 @@
   // ── Navigation helper ─────────────────────────────────────────────────────
 
   function navToWrapped(year, username) {
-    const match = NE.matchRoute(`/wrapped/${year}/${username}`);
+    const match = NE.matchRoute(`/ext/wrapped/${year}/${username}`);
     if (window._nexusNavigate && match) {
       window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
     }
@@ -1703,7 +1703,7 @@
     function pad(n) { return String(n).padStart(2, "0"); }
 
     function handleCta() {
-      const match = NE.matchRoute(`/wrapped/community/${year}`);
+      const match = NE.matchRoute(`/ext/wrapped/community/${year}`);
       if (window._nexusNavigate && match) {
         window._nexusNavigate("ext-route", { _match: match, year: String(year) });
       }
@@ -2281,7 +2281,7 @@
   function WrappedCommunityLandingPage({ currentUser, navigate }) {
     useEffect(() => {
       const year = new Date().getFullYear();
-      const match = NE.matchRoute(`/wrapped/community/${year}`);
+      const match = NE.matchRoute(`/ext/wrapped/community/${year}`);
       if (window._nexusNavigate && match) {
         window._nexusNavigate("ext-route", { _match: match, year: String(year) });
       }
@@ -2309,10 +2309,10 @@
   }
 
   // ── Routes ────────────────────────────────────────────────────────────────
-  NE.registerRoute("/wrapped",                        WrappedLandingPage,          { title: "Wrapped" });
-  NE.registerRoute("/wrapped/community",              WrappedCommunityLandingPage, { title: "Community Wrapped" });
-  NE.registerRoute("/wrapped/community/:year",        WrappedCommunityPage,        { title: "Community Wrapped" });
-  NE.registerRoute("/wrapped/:year/:username",        WrappedPage,                 { title: "Wrapped" });
+  NE.registerRoute("/ext/wrapped",                        WrappedLandingPage,          { title: "Wrapped" });
+  NE.registerRoute("/ext/wrapped/community",              WrappedCommunityLandingPage, { title: "Community Wrapped" });
+  NE.registerRoute("/ext/wrapped/community/:year",        WrappedCommunityPage,        { title: "Community Wrapped" });
+  NE.registerRoute("/ext/wrapped/:year/:username",        WrappedPage,                 { title: "Wrapped" });
 
   // ── Profile tab ───────────────────────────────────────────────────────────
   WrappedProfileTab.tabId    = "wrapped";
@@ -2379,7 +2379,7 @@
       const year     = n.data?.year || new Date().getFullYear();
       const username = n.data?.username;
       if (username) {
-        const match = NE.matchRoute(`/wrapped/${year}/${username}`);
+        const match = NE.matchRoute(`/ext/wrapped/${year}/${username}`);
         if (match && window._nexusNavigate) {
           window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
           return;
