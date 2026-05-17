@@ -18,7 +18,11 @@
     "forum_name_override":   { "type": "string",  "label": "Forum name override",                     "default": "" },
     "send_notification_email": { "type": "boolean", "label": "Send notification email when ready",    "default": true },
     "widget_hide_after":     { "type": "string",  "label": "Hide community widget after (YYYY-MM-DD)","default": "" },
-    "community_post_space_id": { "type": "number", "label": "Community post space ID",                "default": null }
+    "community_post_space_id": { "type": "number", "label": "Community post space ID",                "default": null },
+    "auto_generate_date":    { "type": "string",  "label": "Auto-generate date (YYYY-MM-DD)",         "default": "" },
+    "auto_generate_time":    { "type": "string",  "label": "Auto-generate time (HH:MM)",              "default": "09:00" },
+    "auto_generate_timezone": { "type": "string", "label": "Auto-generate timezone",                  "default": "UTC" },
+    "intro_message":         { "type": "string",  "label": "Intro message template",                  "default": "" }
   },
   "settings_tabs": [
     { "key": "generation",    "label": "Generation",    "icon": "fa-wand-magic-sparkles", "fields": ["widget_hide_after", "community_post_space_id"] },

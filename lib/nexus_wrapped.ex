@@ -32,6 +32,11 @@ defmodule NexusWrapped do
   def js_bundle_path, do: "wrapped.js"
 
   @impl true
+  def child_specs do
+    [NexusWrapped.Scheduler]
+  end
+
+  @impl true
   def settings_schema do
     %{
       "enabled"              => %{"type" => "boolean", "label" => "Enable Wrapped",          "default" => true},
@@ -43,6 +48,10 @@ defmodule NexusWrapped do
       "send_notification_email" => %{"type" => "boolean", "label" => "Send notification email when ready", "default" => true},
       "widget_hide_after"       => %{"type" => "string",  "label" => "Hide community widget after (YYYY-MM-DD)", "default" => ""},
       "community_post_space_id" => %{"type" => "number",  "label" => "Community post space ID", "default" => nil},
+      "auto_generate_date"     => %{"type" => "string",  "label" => "Auto-generate date (YYYY-MM-DD)", "default" => ""},
+      "auto_generate_time"     => %{"type" => "string",  "label" => "Auto-generate time (HH:MM)",      "default" => "09:00"},
+      "auto_generate_timezone" => %{"type" => "string",  "label" => "Auto-generate timezone",           "default" => "UTC"},
+      "intro_message"          => %{"type" => "string",  "label" => "Intro message template",           "default" => ""},
     }
   end
 

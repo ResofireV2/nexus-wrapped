@@ -14,6 +14,14 @@ defmodule NexusWrapped.Generator do
   import Ecto.Query
   alias Nexus.Repo
 
+  @default_intro_message """
+  What a year, [forum_name].
+
+  In [year], [active_members] of you showed up, shared your thoughts, started conversations, and made this place what it is. You wrote [total_posts] posts, left [total_reactions] reactions, and welcomed [new_members] new members into the community.
+
+  This is your year in review.
+  """ |> String.trim()
+
   # ── Public entry point ────────────────────────────────────────────────────
 
   @doc """
@@ -1033,8 +1041,22 @@ defmodule NexusWrapped.Generator do
 
     forum_name = resolve_forum_name(settings)
 
+    intro_message = interpolate_intro(
+      settings["intro_message"],
+      %{
+        "forum_name"      => forum_name,
+        "year"            => to_string(year),
+        "total_posts"     => to_string(total_posts),
+        "total_replies"   => to_string(total_replies),
+        "total_reactions" => to_string(total_reactions),
+        "new_members"     => to_string(new_members),
+        "active_members"  => to_string(active_members),
+      }
+    )
+
     %{
       "forum_name"             => forum_name,
+      "intro_message"          => intro_message,
       "year"                   => year,
       "total_posts"            => total_posts,
       "total_replies"          => total_replies,
@@ -1157,6 +1179,13 @@ defmodule NexusWrapped.Generator do
     |> String.trim()
 
     svg
+  end
+
+  defp interpolate_intro(template, values) do
+    base = if is_binary(template) and String.trim(template) != "", do: template, else: @default_intro_message
+    Enum.reduce(values, base, fn {key, val}, acc ->
+      String.replace(acc, "[#{key}]", val)
+    end)
   end
 
   defp resolve_forum_name(settings) do

@@ -234,23 +234,12 @@ defmodule NexusWrapped.AdminController do
     end
   end
 
-  defp build_community_post_body(data, year, _banner_url, wrapped_url, settings) do
-    forum_name = case settings["forum_name_override"] do
-      name when is_binary(name) and name != "" -> String.trim(name)
-      _ ->
-        case Nexus.Admin.get_setting("general") do
-          %{"site_name" => n} when is_binary(n) and n != "" -> n
-          _ -> "our community"
-        end
-    end
-
-    total_posts   = data["total_posts"]   || 0
-    total_replies = data["total_replies"] || 0
-    new_members   = data["new_members"]   || 0
-    total_reactions = data["total_reactions"] || 0
+  defp build_community_post_body(data, year, _banner_url, wrapped_url, _settings) do
+    # intro_message is already interpolated by generate_community — use it directly.
+    intro = data["intro_message"] || "Thank you for an incredible #{year}."
 
     """
-    #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. You wrote #{total_posts} posts, left #{total_reactions} reactions, and welcomed #{new_members} new members into the community. Every contribution — big and small — adds up to something genuinely special. This community exists because of you. 🙏
+    #{intro}
 
     **[→ View the #{year} Community Wrapped](#{wrapped_url})**
 

@@ -62,8 +62,48 @@
     };
   })();
 
-  // matchRoute patch: re-attach the live component if it was stripped by
-  // pushState/popstate JSON serialisation.
+  // ── Timezone list (mirrors Nexus Digest) ─────────────────────────────────
+  const TIMEZONES = [
+    { group: "UTC",          zones: ["UTC"] },
+    { group: "Americas",     zones: ["America/New_York","America/Chicago","America/Denver","America/Los_Angeles","America/Anchorage","America/Halifax","America/Toronto","America/Vancouver","America/Sao_Paulo","America/Argentina/Buenos_Aires","America/Bogota","America/Lima","America/Mexico_City"] },
+    { group: "Europe",       zones: ["Europe/London","Europe/Dublin","Europe/Paris","Europe/Berlin","Europe/Madrid","Europe/Rome","Europe/Amsterdam","Europe/Brussels","Europe/Zurich","Europe/Stockholm","Europe/Oslo","Europe/Helsinki","Europe/Warsaw","Europe/Prague","Europe/Budapest","Europe/Bucharest","Europe/Athens","Europe/Moscow"] },
+    { group: "Asia/Pacific", zones: ["Asia/Dubai","Asia/Karachi","Asia/Kolkata","Asia/Dhaka","Asia/Bangkok","Asia/Singapore","Asia/Shanghai","Asia/Tokyo","Asia/Seoul","Australia/Sydney","Australia/Melbourne","Pacific/Auckland","Pacific/Honolulu"] },
+    { group: "Africa",       zones: ["Africa/Johannesburg","Africa/Lagos","Africa/Nairobi","Africa/Cairo"] },
+  ];
+
+  // Save arbitrary keys to the extension settings via the Nexus core API.
+  // Returns true on success, false on failure.
+  async function saveSettings(patch) {
+    const token = localStorage.getItem("nexus_token");
+    try {
+      const res = await fetch("/api/v1/admin/extensions/wrapped/settings", {
+        method:  "PATCH",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({ settings: patch }),
+      });
+      const d = await res.json();
+      return !!(d.extension);
+    } catch {
+      return false;
+    }
+  }
+
+  // Load current extension settings from the Nexus core API.
+  async function loadExtSettings() {
+    const token = localStorage.getItem("nexus_token");
+    try {
+      const res = await fetch("/api/v1/admin/extensions/wrapped", {
+        headers: { "Authorization": token ? `Bearer ${token}` : "" },
+      });
+      const d = await res.json();
+      return d.extension?.settings || {};
+    } catch {
+      return {};
+    }
+  }
   (function () {
     const origMatch = NE.matchRoute.bind(NE);
     NE.matchRoute = function (pathname) {
@@ -120,6 +160,27 @@
     const [communityError, setCommunityError]     = useState(null);
     const [communityResult, setCommunityResult]   = useState(null);
 
+    // Schedule state
+    const [schedDate, setSchedDate]   = useState("");
+    const [schedTime, setSchedTime]   = useState("09:00");
+    const [schedTz,   setSchedTz]     = useState("UTC");
+    const [schedSaving, setSchedSaving] = useState(false);
+    const [schedSaved,  setSchedSaved]  = useState(false);
+
+    // Message editor state
+    const [msgText,   setMsgText]   = useState("");
+    const [msgSaving, setMsgSaving] = useState(false);
+    const [msgSaved,  setMsgSaved]  = useState(false);
+    const [msgLoaded, setMsgLoaded] = useState(false);
+
+    const defaultMsg = [
+      "What a year, [forum_name].",
+      "",
+      "In [year], [active_members] of you showed up, shared your thoughts, started conversations, and made this place what it is. You wrote [total_posts] posts, left [total_reactions] reactions, and welcomed [new_members] new members into the community.",
+      "",
+      "This is your year in review.",
+    ].join("\n");
+
     const pollRef = useRef(null);
 
     const loadStatus = useCallback(() => {
@@ -149,6 +210,17 @@
         .then(d => { if (d.data) setCommunityStatus(d.data); })
         .catch(() => {});
     }, [year]);
+
+    // Load schedule and message settings on mount
+    useEffect(() => {
+      loadExtSettings().then(s => {
+        if (s.auto_generate_date)     setSchedDate(s.auto_generate_date);
+        if (s.auto_generate_time)     setSchedTime(s.auto_generate_time);
+        if (s.auto_generate_timezone) setSchedTz(s.auto_generate_timezone);
+        setMsgText(s.intro_message || "");
+        setMsgLoaded(true);
+      });
+    }, []);
 
     useEffect(() => {
       if (status && status.pending > 0 && !pollRef.current) {
@@ -204,177 +276,305 @@
         .finally(() => setCommunityLoading(false));
     };
 
+    const saveSchedule = async () => {
+      setSchedSaving(true); setSchedSaved(false);
+      const ok = await saveSettings({
+        auto_generate_date:     schedDate,
+        auto_generate_time:     schedTime,
+        auto_generate_timezone: schedTz,
+      });
+      setSchedSaving(false);
+      if (ok) { setSchedSaved(true); setTimeout(() => setSchedSaved(false), 2500); }
+    };
+
+    const saveMessage = async () => {
+      setMsgSaving(true); setMsgSaved(false);
+      const ok = await saveSettings({ intro_message: msgText });
+      setMsgSaving(false);
+      if (ok) { setMsgSaved(true); setTimeout(() => setMsgSaved(false), 2500); }
+    };
+
+    const resetMessage = async () => {
+      setMsgText("");
+      await saveSettings({ intro_message: "" });
+    };
+
     const progressPct = status ? Math.min(100, status.pct_complete || 0) : 0;
     const isRunning   = status && status.pending > 0;
 
+    const sectionStyle = {
+      marginTop: 28, paddingTop: 24,
+      borderTop: "0.5px solid var(--b1)",
+    };
+
+    const labelStyle = {
+      fontSize: 11, fontWeight: 500, color: "var(--t5)",
+      textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6,
+    };
+
+    const DATAPOINTS = [
+      { key: "[forum_name]",    desc: "Your forum's name" },
+      { key: "[year]",          desc: "The year (e.g. 2026)" },
+      { key: "[total_posts]",   desc: "Total posts written" },
+      { key: "[total_replies]", desc: "Total replies posted" },
+      { key: "[total_reactions]",desc: "Total reactions left" },
+      { key: "[new_members]",   desc: "New members who joined" },
+      { key: "[active_members]",desc: "Members who posted or replied" },
+    ];
+
     return e("div", null,
 
-      // Year selector
-      e("div", { style: { marginBottom: 24 } },
-        e("label", {
-          style: { fontSize: 12, color: "var(--t4)", display: "block",
-                   marginBottom: 6, fontWeight: 500 },
-        }, "Year"),
-        e("input", {
-          type:      "number",
-          className: "fi",
-          value:     year,
-          onChange:  ev => setYear(ev.target.value),
-          style:     { maxWidth: 120 },
-          min:       2020,
-          max:       currentYear + 1,
-        })
-      ),
-
-      // Status card
-      status && e("div", {
-        style: {
-          background: "var(--s3)", border: "0.5px solid var(--b1)",
-          borderRadius: 10, padding: "14px 16px", marginBottom: 20,
-        },
-      },
-        e("div", {
-          style: { display: "flex", gap: 20, flexWrap: "wrap", marginBottom: isRunning ? 12 : 0 },
-        },
-          ...[
-            ["Total active users", status.total_active],
-            ["Generated",          status.generated],
-            ["Pending",            status.pending],
-          ].map(([label, val]) =>
-            e("div", { key: label },
-              e("div", { style: { fontSize: 20, fontWeight: 600, color: "var(--t1)", lineHeight: 1 } },
-                val ?? "—"),
-              e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 3 } }, label)
+      // ── Auto-generation schedule ────────────────────────────────────────
+      e("div", { style: { marginBottom: 4 } },
+        e("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--t2)", marginBottom: 4 } },
+          "Auto-generation Schedule"
+        ),
+        e("div", { style: { fontSize: 12, color: "var(--t4)", marginBottom: 16, lineHeight: 1.6 } },
+          "Wrapped will be automatically generated for all eligible members at the date and time you set. " +
+          "The manual buttons below can be used to run it early or re-trigger if something goes wrong."
+        ),
+        e("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" } },
+          e("div", { style: { marginBottom: 16 } },
+            e("div", { style: labelStyle }, "Date"),
+            e("input", {
+              type: "date", className: "fi",
+              value: schedDate, onChange: ev => setSchedDate(ev.target.value),
+              style: { width: "100%" },
+            })
+          ),
+          e("div", { style: { marginBottom: 16 } },
+            e("div", { style: labelStyle }, "Time"),
+            e("input", {
+              type: "time", className: "fi",
+              value: schedTime, onChange: ev => setSchedTime(ev.target.value),
+              style: { width: "100%" },
+            })
+          ),
+          e("div", { style: { marginBottom: 16, gridColumn: "1 / -1" } },
+            e("div", { style: labelStyle }, "Timezone"),
+            e("select", {
+              className: "fi",
+              value: schedTz, onChange: ev => setSchedTz(ev.target.value),
+              style: { width: "100%" },
+            },
+              ...TIMEZONES.map(g =>
+                e("optgroup", { key: g.group, label: g.group },
+                  ...g.zones.map(z =>
+                    e("option", { key: z, value: z }, z.replace(/_/g, " "))
+                  )
+                )
+              )
             )
           )
         ),
-
-        isRunning && e("div", null,
-          e("div", {
-            style: { height: 4, borderRadius: 2, background: "var(--b1)", overflow: "hidden" },
-          },
-            e("div", {
-              style: {
-                height: "100%", borderRadius: 2, background: "var(--ac)",
-                width: `${progressPct}%`, transition: "width 0.4s ease",
-              },
-            })
-          ),
-          e("div", {
-            style: { fontSize: 11, color: "var(--t4)", marginTop: 5 },
-          }, `${progressPct}% complete — generating…`)
-        )
-      ),
-
-      // Action buttons — individual Wrappeds
-      e("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 } },
         e("button", {
-          onClick:  generateAll,
-          disabled: genLoading || isRunning,
+          onClick: saveSchedule, disabled: schedSaving,
           style: {
             fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
-            fontWeight: 500, cursor: (genLoading || isRunning) ? "default" : "pointer",
-            opacity: (genLoading || isRunning) ? 0.6 : 1,
+            fontWeight: 500, cursor: schedSaving ? "default" : "pointer",
+            opacity: schedSaving ? 0.6 : 1,
             background: "var(--ac)", border: "none", color: "var(--ac-on)",
           },
-        },
-          e("i", { className: "fa-solid fa-wand-magic-sparkles", style: { marginRight: 7, fontSize: 12 } }),
-          genLoading ? "Enqueueing…" : isRunning ? "Running…" : "Generate all users"
-        ),
+        }, schedSaving ? "Saving…" : schedSaved ? "✓ Saved" : "Save Schedule")
+      ),
 
-        e("button", {
-          onClick:  simulate,
-          disabled: simLoading,
-          style: {
-            fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
-            fontWeight: 500, cursor: simLoading ? "default" : "pointer",
-            opacity: simLoading ? 0.6 : 1,
-            background: "rgba(96,165,250,0.1)",
-            border: "0.5px solid rgba(96,165,250,0.35)",
-            color: "#60a5fa",
-          },
-        },
-          e("i", { className: "fa-solid fa-flask", style: { marginRight: 7, fontSize: 12 } }),
-          simLoading ? "Simulating…" : "Simulate for me"
-        ),
-
-        e("button", {
-          onClick:  loadStatus,
-          disabled: statusLoading,
-          style: {
-            fontSize: 13, padding: "8px 14px", borderRadius: 8, fontFamily: "inherit",
-            cursor: statusLoading ? "default" : "pointer",
-            opacity: statusLoading ? 0.5 : 1,
-            background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)",
-          },
-        },
-          e("i", {
-            className: `fa-solid fa-rotate${statusLoading ? " fa-spin" : ""}`,
-            style: { fontSize: 12 },
+      // ── Year selector ───────────────────────────────────────────────────
+      e("div", { style: sectionStyle },
+        e("div", { style: { marginBottom: 24 } },
+          e("label", {
+            style: { fontSize: 12, color: "var(--t4)", display: "block", marginBottom: 6, fontWeight: 500 },
+          }, "Year"),
+          e("input", {
+            type: "number", className: "fi",
+            value: year, onChange: ev => setYear(ev.target.value),
+            style: { maxWidth: 120 },
+            min: 2020, max: currentYear + 1,
           })
+        ),
+
+        // Status card
+        status && e("div", {
+          style: {
+            background: "var(--s3)", border: "0.5px solid var(--b1)",
+            borderRadius: 10, padding: "14px 16px", marginBottom: 20,
+          },
+        },
+          e("div", {
+            style: { display: "flex", gap: 20, flexWrap: "wrap", marginBottom: isRunning ? 12 : 0 },
+          },
+            ...[
+              ["Total active users", status.total_active],
+              ["Generated",          status.generated],
+              ["Pending",            status.pending],
+            ].map(([label, val]) =>
+              e("div", { key: label },
+                e("div", { style: { fontSize: 20, fontWeight: 600, color: "var(--t1)", lineHeight: 1 } }, val ?? "—"),
+                e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 3 } }, label)
+              )
+            )
+          ),
+          isRunning && e("div", null,
+            e("div", {
+              style: { height: 4, borderRadius: 2, background: "var(--b1)", overflow: "hidden" },
+            },
+              e("div", {
+                style: {
+                  height: "100%", borderRadius: 2, background: "var(--ac)",
+                  width: `${progressPct}%`, transition: "width 0.4s ease",
+                },
+              })
+            ),
+            e("div", { style: { fontSize: 11, color: "var(--t4)", marginTop: 5 } },
+              `${progressPct}% complete — generating…`)
+          )
+        ),
+
+        // Action buttons
+        e("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 } },
+          e("button", {
+            onClick: generateAll, disabled: genLoading || isRunning,
+            style: {
+              fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+              fontWeight: 500, cursor: (genLoading || isRunning) ? "default" : "pointer",
+              opacity: (genLoading || isRunning) ? 0.6 : 1,
+              background: "var(--ac)", border: "none", color: "var(--ac-on)",
+            },
+          },
+            e("i", { className: "fa-solid fa-wand-magic-sparkles", style: { marginRight: 7, fontSize: 12 } }),
+            genLoading ? "Enqueueing…" : isRunning ? "Running…" : "Generate all users"
+          ),
+          e("button", {
+            onClick: simulate, disabled: simLoading,
+            style: {
+              fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+              fontWeight: 500, cursor: simLoading ? "default" : "pointer",
+              opacity: simLoading ? 0.6 : 1,
+              background: "rgba(96,165,250,0.1)",
+              border: "0.5px solid rgba(96,165,250,0.35)", color: "#60a5fa",
+            },
+          },
+            e("i", { className: "fa-solid fa-flask", style: { marginRight: 7, fontSize: 12 } }),
+            simLoading ? "Simulating…" : "Simulate for me"
+          ),
+          e("button", {
+            onClick: loadStatus, disabled: statusLoading,
+            style: {
+              fontSize: 13, padding: "8px 14px", borderRadius: 8, fontFamily: "inherit",
+              cursor: statusLoading ? "default" : "pointer",
+              opacity: statusLoading ? 0.5 : 1,
+              background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)",
+            },
+          },
+            e("i", { className: `fa-solid fa-rotate${statusLoading ? " fa-spin" : ""}`, style: { fontSize: 12 } })
+          )
+        ),
+
+        genResult && e("div", {
+          style: { fontSize: 13, color: "var(--green)", marginBottom: 10, display: "flex", alignItems: "center", gap: 7 },
+        },
+          e("i", { className: "fa-solid fa-circle-check", style: { fontSize: 13 } }),
+          `Enqueued ${genResult.enqueued} generation jobs for ${genResult.year}`
+        ),
+        genError && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, genError),
+        simError && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, simError)
+      ),
+
+      // ── Intro message editor ────────────────────────────────────────────
+      e("div", { style: sectionStyle },
+        e("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--t2)", marginBottom: 4 } },
+          "Intro Message"
+        ),
+        e("div", { style: { fontSize: 12, color: "var(--t4)", marginBottom: 14, lineHeight: 1.6 } },
+          "This message appears as the first slide of Community Wrapped and in the community post. " +
+          "Leave blank to use the default. Available datapoints:"
+        ),
+
+        // Datapoint reference pills
+        e("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 } },
+          ...DATAPOINTS.map(dp =>
+            e("div", {
+              key: dp.key,
+              title: dp.desc,
+              style: {
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "3px 10px", borderRadius: 20, fontSize: 12,
+                background: "rgba(167,139,250,0.1)",
+                border: "0.5px solid rgba(167,139,250,0.3)",
+                color: "var(--ac-text)", cursor: "default",
+                fontFamily: "monospace",
+              },
+            }, dp.key)
+          )
+        ),
+
+        // Textarea
+        msgLoaded && e("textarea", {
+          className: "fi",
+          value: msgText || "",
+          onChange: ev => setMsgText(ev.target.value),
+          placeholder: defaultMsg,
+          rows: 8,
+          style: {
+            width: "100%", fontSize: 13, lineHeight: 1.65,
+            resize: "vertical", fontFamily: "inherit",
+          },
+        }),
+
+        e("div", { style: { display: "flex", gap: 10, alignItems: "center", marginTop: 10 } },
+          e("button", {
+            onClick: saveMessage, disabled: msgSaving,
+            style: {
+              fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
+              fontWeight: 500, cursor: msgSaving ? "default" : "pointer",
+              opacity: msgSaving ? 0.6 : 1,
+              background: "var(--ac)", border: "none", color: "var(--ac-on)",
+            },
+          }, msgSaving ? "Saving…" : msgSaved ? "✓ Saved" : "Save Message"),
+          e("button", {
+            onClick: resetMessage,
+            style: {
+              fontSize: 12, padding: "7px 14px", borderRadius: 8, fontFamily: "inherit",
+              cursor: "pointer", background: "none",
+              border: "0.5px solid var(--b1)", color: "var(--t4)",
+            },
+          }, "Reset to default")
         )
       ),
 
-      genResult && e("div", {
-        style: { fontSize: 13, color: "var(--green)", marginBottom: 10,
-                 display: "flex", alignItems: "center", gap: 7 },
-      },
-        e("i", { className: "fa-solid fa-circle-check", style: { fontSize: 13 } }),
-        `Enqueued ${genResult.enqueued} generation jobs for ${genResult.year}`
-      ),
-
-      genError  && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, genError),
-      simError  && e("div", { style: { fontSize: 13, color: "var(--red)", marginBottom: 10 } }, simError),
-
       // ── Community Wrapped post ──────────────────────────────────────────
-      e("div", {
-        style: {
-          marginTop: 28, paddingTop: 24,
-          borderTop: "0.5px solid var(--b1)",
-        },
-      },
+      e("div", { style: sectionStyle },
         e("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--t2)", marginBottom: 4 } },
           "Community Wrapped Post"
         ),
         e("div", { style: { fontSize: 12, color: "var(--t4)", marginBottom: 16, lineHeight: 1.6 } },
-          "Creates a pinned forum post with community-wide stats for the year — total posts, top contributors, most active spaces, and more."
+          "Optional — creates a pinned forum post with a link to the Community Wrapped slideshow."
         ),
 
-        // Existing post status
         communityStatus && communityStatus.exists && e("div", {
-          style: {
-            fontSize: 12, color: "var(--amber)", marginBottom: 12,
-            display: "flex", alignItems: "center", gap: 6,
-          },
+          style: { fontSize: 12, color: "var(--amber)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 },
         },
           e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 11 } }),
           `A community post already exists for ${year}. Posting again will create a new one.`
         ),
 
-        // Space picker + post button
         e("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
           e("select", {
             className: "fi",
-            value:    selectedSpace,
-            onChange: ev => setSelectedSpace(ev.target.value),
-            style:    { maxWidth: 200, fontSize: 13 },
+            value: selectedSpace, onChange: ev => setSelectedSpace(ev.target.value),
+            style: { maxWidth: 200, fontSize: 13 },
           },
             e("option", { value: "" }, "Select a space…"),
-            ...spaces.map(s =>
-              e("option", { key: s.id, value: s.id }, s.name)
-            )
+            ...spaces.map(s => e("option", { key: s.id, value: s.id }, s.name))
           ),
           e("button", {
-            onClick:  postCommunity,
-            disabled: communityLoading || !selectedSpace,
+            onClick: postCommunity, disabled: communityLoading || !selectedSpace,
             style: {
               fontSize: 13, padding: "8px 18px", borderRadius: 8, fontFamily: "inherit",
               fontWeight: 500,
               cursor: (communityLoading || !selectedSpace) ? "default" : "pointer",
               opacity: (communityLoading || !selectedSpace) ? 0.6 : 1,
               background: "rgba(52,211,153,0.1)",
-              border: "0.5px solid rgba(52,211,153,0.35)",
-              color: "var(--green)",
+              border: "0.5px solid rgba(52,211,153,0.35)", color: "var(--green)",
             },
           },
             e("i", { className: "fa-solid fa-paper-plane", style: { marginRight: 7, fontSize: 12 } }),
@@ -383,27 +583,23 @@
         ),
 
         communityResult && e("div", {
-          style: { fontSize: 13, color: "var(--green)", marginTop: 10,
-                   display: "flex", alignItems: "center", gap: 7 },
+          style: { fontSize: 13, color: "var(--green)", marginTop: 10, display: "flex", alignItems: "center", gap: 7 },
         },
           e("i", { className: "fa-solid fa-circle-check", style: { fontSize: 13 } }),
-          `Posted! `,
+          "Posted! ",
           e("a", {
-            href:    `/posts/${communityResult.post_id}`,
-            style:   { color: "var(--ac-text)", textDecoration: "none" },
+            href: `/posts/${communityResult.post_id}`,
+            style: { color: "var(--ac-text)", textDecoration: "none" },
             onClick: ev => {
               ev.preventDefault();
               if (window._nexusNavigate) window._nexusNavigate("post", { id: communityResult.post_id });
             },
           }, "View post →")
         ),
-
-        communityError && e("div", {
-          style: { fontSize: 13, color: "var(--red)", marginTop: 10 },
-        }, communityError)
+        communityError && e("div", { style: { fontSize: 13, color: "var(--red)", marginTop: 10 } }, communityError)
       ),
 
-      // Explanation
+      // Explanation footer
       e("div", {
         style: {
           fontSize: 12, color: "var(--t5)", lineHeight: 1.7,
@@ -1859,11 +2055,41 @@
 
   // ── Slide 0: Thank you / Intro ────────────────────────────────────────────
   function CommSlideIntro({ d, forumName }) {
-    const year         = d.year;
-    const totalPosts   = (d.total_posts   || 0).toLocaleString();
+    const year          = d.year;
+    const introMessage  = d.intro_message;
+
+    // If a custom message was stored (already interpolated by the backend),
+    // render it as plain text paragraphs. Otherwise use the default structured layout.
+    if (introMessage) {
+      const paragraphs = introMessage.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+      return e(Slide, null,
+        e(ConfettiBurst, { active: true }),
+        e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+          `${forumName} · ${year}`
+        ),
+        e("div", { style: { maxWidth: 420, display: "flex", flexDirection: "column", gap: 16 } },
+          ...paragraphs.map((p, i) =>
+            e("div", {
+              key: i,
+              className: "wr-fade-up",
+              style: {
+                fontSize: i === 0 ? 26 : 15,
+                fontWeight: i === 0 ? 700 : 400,
+                color: i === 0 ? "var(--t1)" : "var(--t3)",
+                lineHeight: 1.5,
+                animationDelay: `${0.1 + i * 0.15}s`,
+              },
+            }, p)
+          )
+        )
+      );
+    }
+
+    // Default layout
+    const totalPosts     = (d.total_posts     || 0).toLocaleString();
     const totalReactions = (d.total_reactions || 0).toLocaleString();
-    const newMembers   = (d.new_members   || 0).toLocaleString();
-    const activeMembers = (d.active_members || 0).toLocaleString();
+    const newMembers     = (d.new_members     || 0).toLocaleString();
+    const activeMembers  = (d.active_members  || 0).toLocaleString();
 
     return e(Slide, null,
       e(ConfettiBurst, { active: true }),
