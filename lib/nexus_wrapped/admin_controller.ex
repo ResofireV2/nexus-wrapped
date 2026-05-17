@@ -165,15 +165,11 @@ defmodule NexusWrapped.AdminController do
     else
       data = NexusWrapped.Generator.generate_community(year, settings)
 
-      # Generate and save the banner SVG
-      svg_content = NexusWrapped.Generator.generate_community_banner(data, settings)
-      banner_url  = save_community_banner(svg_content, year)
-
       # Build the community Wrapped route URL
       wrapped_url = "/ext/wrapped/community/#{year}"
 
-      # Build the post body — thank you message, teaser stats, linked banner card
-      body = build_community_post_body(data, year, banner_url, wrapped_url, settings)
+      # Plain markdown post — thank you message + link only
+      body  = build_community_post_body(data, year, nil, wrapped_url, settings)
       title = "#{year} Community Wrapped 🎉"
 
       case Nexus.Forum.create_post(
@@ -238,15 +234,7 @@ defmodule NexusWrapped.AdminController do
     end
   end
 
-  defp save_community_banner(svg_content, year) do
-    Nexus.Extensions.Storage.ensure_dir("wrapped", "banners")
-    filename = "community-#{year}.svg"
-    path     = Nexus.Extensions.Storage.path("wrapped", "banners/#{filename}")
-    File.write!(path, svg_content)
-    Nexus.Extensions.Storage.url("wrapped", "banners/#{filename}")
-  end
-
-  defp build_community_post_body(data, year, banner_url, wrapped_url, settings) do
+  defp build_community_post_body(data, year, _banner_url, wrapped_url, settings) do
     forum_name = case settings["forum_name_override"] do
       name when is_binary(name) and name != "" -> String.trim(name)
       _ ->
@@ -256,91 +244,20 @@ defmodule NexusWrapped.AdminController do
         end
     end
 
-    top_posters = data["top_posters"] || []
-    top_spaces  = data["top_spaces"]  || []
-    discussed   = data["most_discussed"]
-
-    # YoY teasers — only show if we have previous year data to compare
-    teasers = build_teasers(data)
-
-    poster_lines = top_posters
-      |> Enum.with_index(1)
-      |> Enum.map(fn {p, i} -> "#{i}. **@#{p["username"]}** — #{p["post_count"]} posts" end)
-      |> Enum.join("\n")
-
-    space_lines = top_spaces
-      |> Enum.map(fn s -> "- **#{s["name"]}** — #{s["post_count"]} posts" end)
-      |> Enum.join("\n")
-
-    discussed_section = if discussed do
-      "\n## 🏆 Most Discussed Thread\n\n[#{discussed["title"]}](/posts/#{discussed["id"]}) — #{discussed["reply_count"]} replies\n"
-    else
-      ""
-    end
-
-    teaser_section = if teasers != "" do
-      "\n#{teasers}\n"
-    else
-      ""
-    end
-
-    # Use an HTML anchor with onclick for SPA navigation — markdown image-links
-    # get intercepted by Nexus's lightbox renderer and never produce a real <a> tag.
-    # onclick is in the DOMPurify allowlist so this survives sanitisation.
-    nav_script = "if(window._nexusNavigate){window._nexusNavigate('ext-route',window.NexusExtensions&&window.NexusExtensions.matchRoute('/wrapped/community/#{year}')||{});}else{window.location.href='#{wrapped_url}';}"
-    # Wrap in a <div> block — marked treats block-level HTML as raw passthrough,
-    # bypassing the link renderer that strips <a> tags wrapping images (lightbox logic).
-    banner_html = "<div><a href=\"#{wrapped_url}\" onclick=\"#{nav_script}\"><img src=\"#{banner_url}\" alt=\"#{year} Community Wrapped\" width=\"680\"/></a></div>"
+    total_posts   = data["total_posts"]   || 0
+    total_replies = data["total_replies"] || 0
+    new_members   = data["new_members"]   || 0
+    total_reactions = data["total_reactions"] || 0
 
     """
-    #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. Every post, every reply, every reaction — it all adds up to something genuinely special. This community exists because of you. 🙏
-    #{teaser_section}
-    ---
+    #{year} was an incredible year for #{forum_name}. Thank you to every member who showed up, shared their thoughts, started conversations, and made this place what it is. You wrote #{total_posts} posts, left #{total_reactions} reactions, and welcomed #{new_members} new members into the community. Every contribution — big and small — adds up to something genuinely special. This community exists because of you. 🙏
 
-    #{banner_html}
-
-    ---
-
-    ## 🌟 Top Contributors
-
-    #{poster_lines}
-
-    ## 🏠 Most Active Spaces
-
-    #{space_lines}
-    #{discussed_section}
-    ---
+    **[→ View the #{year} Community Wrapped](#{wrapped_url})**
 
     *Your personal #{year} Wrapped is waiting on your profile — check the Wrapped tab to see your own year in review.*
     """
     |> String.trim()
   end
-
-  defp build_teasers(data) do
-    prev_posts   = data["prev_total_posts"]    || 0
-    prev_members = data["prev_active_members"] || 0
-    curr_posts   = data["total_posts"]         || 0
-    curr_members = data["active_members"]      || 0
-
-    lines =
-      [
-        yoy_teaser(curr_posts,   prev_posts,   "posts written",   "📝"),
-        yoy_teaser(curr_members, prev_members, "active members",  "👥"),
-      ]
-      |> Enum.filter(& &1)
-
-    Enum.join(lines, "\n")
-  end
-
-  defp yoy_teaser(current, prev, label, icon) when prev > 0 do
-    pct = round((current - prev) / prev * 100)
-    cond do
-      pct > 0  -> "#{icon} **#{pct}% more #{label}** than last year"
-      pct < 0  -> "#{icon} **#{abs(pct)}% fewer #{label}** than last year"
-      true     -> nil
-    end
-  end
-  defp yoy_teaser(_, _, _, _), do: nil
   defp parse_year(nil),     do: Date.utc_today().year
   defp parse_year(y) when is_integer(y), do: y
   defp parse_year(y) when is_binary(y),  do: String.to_integer(y)

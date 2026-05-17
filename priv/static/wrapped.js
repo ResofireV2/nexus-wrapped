@@ -434,6 +434,10 @@
   ];
 
   const TAB_FIELDS = {
+    generation: [
+      { key: "widget_hide_after",       label: "Hide community widget after (YYYY-MM-DD)", type: "string",  default: "",   hint: "The sidebar widget disappears after this date. Leave blank to keep it visible indefinitely." },
+      { key: "community_post_space_id", label: "Community post space ID",                  type: "number",  default: null, hint: "Space to post the optional community announcement post into." },
+    ],
     visibility: [
       { key: "enabled",             label: "Enable Wrapped",             type: "boolean", default: true  },
       { key: "sharing_default",     label: "Share by default",           type: "boolean", default: false },
@@ -490,8 +494,14 @@
         )
       ),
 
-      // Tab content
-      activeTab === "generation" && e(GenerationTab),
+      // Generation tab: settings fields (widget_hide_after, community_post_space_id)
+      // rendered via SimpleSettingsPanel, followed by the custom action buttons below.
+      activeTab === "generation" && e("div", null,
+        e(NET.SimpleSettingsPanel, { slug: "wrapped", fields: TAB_FIELDS.generation }),
+        e("div", { style: { borderTop: "0.5px solid var(--b1)", marginTop: 24, paddingTop: 24 } },
+          e(GenerationTab)
+        )
+      ),
 
       activeTab !== "generation" && TAB_FIELDS[activeTab] && e(NET.SimpleSettingsPanel, {
         slug:   "wrapped",
@@ -1640,6 +1650,648 @@
   }
 
   // =========================================================================
+  // COMMUNITY WRAPPED WIDGET — global right sidebar
+  // =========================================================================
+  // Fetches GET /community/:year to check if a community Wrapped has been
+  // generated. Returns null (invisible) if none exists or if today is past
+  // widget_hide_after. Styled as a standalone card like AwardAnnouncementWidget.
+
+  function WrappedCommunityWidget({ navigate }) {
+    const [data,    setData]    = useState(null);
+    const [tick,    setTick]    = useState(0);
+    const [loading, setLoading] = useState(true);
+
+    const year = new Date().getFullYear();
+
+    useEffect(() => {
+      apiFetch(`/community/${year}`)
+        .then(d => { if (d.data) setData(d.data); })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, [year]);
+
+    // Countdown tick — updates every second until hide date
+    useEffect(() => {
+      if (!data) return;
+      const id = setInterval(() => setTick(n => n + 1), 1000);
+      return () => clearInterval(id);
+    }, [data]);
+
+    if (loading || !data) return null;
+
+    // If widget_hide_after is set and today is past it, hide the widget
+    const hideAfter = data.widget_hide_after;
+    if (hideAfter) {
+      const hideDate = new Date(hideAfter);
+      // Set to end of that day
+      hideDate.setHours(23, 59, 59, 999);
+      if (new Date() > hideDate) return null;
+    }
+
+    // Countdown to hide date
+    function getCountdown() {
+      if (!hideAfter) return null;
+      const diff = new Date(hideAfter) - new Date();
+      if (diff <= 0) return null;
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000)  / 60000);
+      const s = Math.floor((diff % 60000)    / 1000);
+      return { d, h, m, s };
+    }
+
+    function pad(n) { return String(n).padStart(2, "0"); }
+
+    function handleCta() {
+      const match = NE.matchRoute(`/wrapped/community/${year}`);
+      if (window._nexusNavigate && match) {
+        window._nexusNavigate("ext-route", { _match: match, year: String(year) });
+      }
+    }
+
+    const cd = getCountdown();
+
+    const cardStyle = {
+      borderRadius: 12,
+      border: "0.5px solid rgba(255,255,255,0.08)",
+      overflow: "hidden",
+      background: "#08080f",
+    };
+
+    const bannerStyle = {
+      width: "100%",
+      display: "block",
+    };
+
+    const cdCellStyle = {
+      borderRadius: 8, padding: "6px 4px", textAlign: "center",
+      background: "rgba(167,139,250,0.10)",
+      border: "0.5px solid rgba(167,139,250,0.25)",
+    };
+
+    const ctaStyle = {
+      display: "block", width: "100%", padding: "9px 0",
+      borderRadius: 8, fontSize: 13, fontWeight: 500,
+      textAlign: "center", cursor: "pointer", border: "none",
+      background: "#a78bfa", color: "#0d0d14",
+      fontFamily: "inherit",
+    };
+
+    // Inline banner SVG — same design as generate_community_banner output,
+    // rendered directly so the widget works without a saved file.
+    const bannerSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 680 200">
+      <rect width="680" height="200" fill="#080812"/>
+      <rect x="220" y="38"  width="8"  height="22" rx="2" fill="#fbbf24" transform="rotate(-40,224,49)"/>
+      <rect x="190" y="55"  width="6"  height="16" rx="2" fill="#f472b6" transform="rotate(-55,193,63)"/>
+      <rect x="250" y="28"  width="5"  height="14" rx="2" fill="#60a5fa" transform="rotate(-25,252,35)"/>
+      <rect x="172" y="40"  width="7"  height="18" rx="2" fill="#34d399" transform="rotate(-65,175,49)"/>
+      <rect x="140" y="60"  width="5"  height="13" rx="2" fill="#a78bfa" transform="rotate(-50,142,66)"/>
+      <rect x="108" y="32"  width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-35,111,40)"/>
+      <rect x="74"  y="50"  width="5"  height="14" rx="2" fill="#f472b6" transform="rotate(-20,76,57)"/>
+      <rect x="444" y="38"  width="8"  height="22" rx="2" fill="#a78bfa" transform="rotate(40,448,49)"/>
+      <rect x="474" y="55"  width="6"  height="16" rx="2" fill="#34d399" transform="rotate(55,477,63)"/>
+      <rect x="418" y="28"  width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(25,420,35)"/>
+      <rect x="500" y="40"  width="7"  height="18" rx="2" fill="#f472b6" transform="rotate(65,503,49)"/>
+      <rect x="530" y="60"  width="5"  height="13" rx="2" fill="#60a5fa" transform="rotate(50,532,66)"/>
+      <rect x="566" y="32"  width="6"  height="16" rx="2" fill="#34d399" transform="rotate(35,569,40)"/>
+      <rect x="598" y="52"  width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(22,600,59)"/>
+      <rect x="220" y="148" width="8"  height="22" rx="2" fill="#60a5fa" transform="rotate(40,224,159)"/>
+      <rect x="190" y="132" width="6"  height="16" rx="2" fill="#a78bfa" transform="rotate(55,193,140)"/>
+      <rect x="160" y="155" width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(25,162,162)"/>
+      <rect x="120" y="138" width="7"  height="18" rx="2" fill="#f472b6" transform="rotate(65,123,147)"/>
+      <rect x="88"  y="158" width="5"  height="13" rx="2" fill="#34d399" transform="rotate(50,90,164)"/>
+      <rect x="56"  y="145" width="6"  height="16" rx="2" fill="#60a5fa" transform="rotate(30,59,153)"/>
+      <rect x="450" y="148" width="8"  height="22" rx="2" fill="#f472b6" transform="rotate(-40,454,159)"/>
+      <rect x="480" y="132" width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-55,483,140)"/>
+      <rect x="512" y="155" width="5"  height="14" rx="2" fill="#a78bfa" transform="rotate(-25,514,162)"/>
+      <rect x="544" y="138" width="7"  height="18" rx="2" fill="#34d399" transform="rotate(-65,547,147)"/>
+      <rect x="580" y="158" width="5"  height="13" rx="2" fill="#60a5fa" transform="rotate(-50,582,164)"/>
+      <rect x="616" y="143" width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-30,619,151)"/>
+      <circle cx="60"  cy="100" r="2.5" fill="#a78bfa" opacity="0.7"/>
+      <circle cx="136" cy="100" r="2"   fill="#fbbf24" opacity="0.6"/>
+      <circle cx="544" cy="100" r="2"   fill="#f472b6" opacity="0.6"/>
+      <circle cx="620" cy="100" r="2.5" fill="#34d399" opacity="0.7"/>
+      <circle cx="340" cy="18"  r="2"   fill="#60a5fa" opacity="0.6"/>
+      <circle cx="340" cy="182" r="2"   fill="#fbbf24" opacity="0.6"/>
+      <text x="340" y="76" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="11" letter-spacing="5" font-weight="400" fill="#6b5fa0">${(data.community?.forum_name || String(year)).toUpperCase()}</text>
+      <text x="340" y="142" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="76" font-weight="700" letter-spacing="-3" fill="#ffffff">${year}</text>
+      <text x="340" y="164" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="13" letter-spacing="5" font-weight="600"><tspan fill="#a78bfa">W</tspan><tspan fill="#f472b6">R</tspan><tspan fill="#fbbf24">A</tspan><tspan fill="#34d399">P</tspan><tspan fill="#60a5fa">P</tspan><tspan fill="#a78bfa">E</tspan><tspan fill="#f472b6">D</tspan></text>
+    </svg>`;
+
+    return e("div", { style: cardStyle },
+
+      // Banner — inline SVG as HTML
+      e("div", {
+        style: bannerStyle,
+        dangerouslySetInnerHTML: { __html: bannerSvg },
+      }),
+
+      // Body
+      e("div", { style: { padding: "12px 14px 14px" } },
+
+        // Label
+        e("div", {
+          style: { fontSize: 12, color: "rgba(255,255,255,0.55)", marginBottom: 10, lineHeight: 1.5 },
+        }, `The ${year} Community Wrapped is ready to view.`),
+
+        // Countdown to hide date
+        cd && e("div", { style: { marginBottom: 10 } },
+          e("div", { style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 6 } },
+            [{ v: pad(cd.d), l: "days" }, { v: pad(cd.h), l: "hrs" }, { v: pad(cd.m), l: "min" }, { v: pad(cd.s), l: "sec" }]
+              .map(seg => e("div", { key: seg.l, style: cdCellStyle },
+                e("div", { style: { fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1, marginBottom: 2, color: "#a78bfa" } }, seg.v),
+                e("div", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", color: "rgba(167,139,250,0.55)" } }, seg.l)
+              ))
+          ),
+          e("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.25)", textAlign: "center" } },
+            "Available until " + new Date(hideAfter).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+          )
+        ),
+
+        // CTA
+        e("button", { onClick: handleCta, style: ctaStyle }, `View ${year} Community Wrapped`)
+      )
+    );
+  }
+
+  // =========================================================================
+  // COMMUNITY WRAPPED SLIDESHOW — /wrapped/community/:year
+  // =========================================================================
+
+  // ── YoY delta helper ──────────────────────────────────────────────────────
+  function YoYBadge({ current, prev }) {
+    if (!prev || prev === 0) return null;
+    const pct = Math.round((current - prev) / prev * 100);
+    if (pct === 0) return null;
+    const up    = pct > 0;
+    const color = up ? "var(--green)" : "var(--red)";
+    const bg    = up ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)";
+    const icon  = up ? "fa-arrow-up" : "fa-arrow-down";
+    return e("span", {
+      className: "wr-fade-in",
+      style: {
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "2px 8px", borderRadius: 20, fontSize: 12,
+        background: bg, color, marginLeft: 8,
+        animationDelay: "0.5s",
+      },
+    },
+      e("i", { className: `fa-solid ${icon}`, style: { fontSize: 10 } }),
+      `${Math.abs(pct)}%`
+    );
+  }
+
+  // ── Avatar helper ─────────────────────────────────────────────────────────
+  function CommunityAvatar({ user, size = 40 }) {
+    const initials = (user.username || "?").slice(0, 2).toUpperCase();
+    return e("div", {
+      style: {
+        width: size, height: size, borderRadius: "50%", flexShrink: 0,
+        background: user.avatar_color || "var(--ac)",
+        overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+      },
+    },
+      user.avatar_url
+        ? e("img", { src: user.avatar_url, alt: user.username, style: { width: "100%", height: "100%", objectFit: "cover" } })
+        : e("span", { style: { fontSize: size * 0.35, fontWeight: 600, color: "var(--ac-on)" } }, initials)
+    );
+  }
+
+  // ── Slide 0: Thank you / Intro ────────────────────────────────────────────
+  function CommSlideIntro({ d, forumName }) {
+    const year         = d.year;
+    const totalPosts   = (d.total_posts   || 0).toLocaleString();
+    const totalReactions = (d.total_reactions || 0).toLocaleString();
+    const newMembers   = (d.new_members   || 0).toLocaleString();
+    const activeMembers = (d.active_members || 0).toLocaleString();
+
+    return e(Slide, null,
+      e(ConfettiBurst, { active: true }),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 16, textTransform: "uppercase" } },
+        `${forumName} · ${year}`
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 52, fontWeight: 700, color: "var(--ac)", lineHeight: 1.1, letterSpacing: -2, animationDelay: "0.1s", maxWidth: 360 } },
+        `What a year, ${forumName}.`
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 15, color: "var(--t3)", marginTop: 20, maxWidth: 380, lineHeight: 1.65, animationDelay: "0.3s" } },
+        `In ${year}, `, e("strong", { style: { color: "var(--t1)" } }, activeMembers),
+        " of you showed up, shared your thoughts, started conversations, and made this place what it is. You wrote ",
+        e("strong", { style: { color: "var(--t1)" } }, totalPosts),
+        " posts, left ",
+        e("strong", { style: { color: "var(--t1)" } }, totalReactions),
+        " reactions, and welcomed ",
+        e("strong", { style: { color: "var(--t1)" } }, newMembers),
+        " new members into the community."
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t4)", marginTop: 16, animationDelay: "0.5s" } },
+        "This is your year in review."
+      )
+    );
+  }
+
+  // ── Slide 1: The Numbers ──────────────────────────────────────────────────
+  function CommSlideNumbers({ d }) {
+    const stats = [
+      { label: "posts written",    val: d.total_posts,     prev: d.prev_total_posts,     color: "var(--ac)"   },
+      { label: "replies posted",   val: d.total_replies,   prev: d.prev_total_replies,   color: "var(--pink)" },
+      { label: "reactions left",   val: d.total_reactions, prev: d.prev_total_reactions, color: "var(--green)"},
+      { label: "new members",      val: d.new_members,     prev: null,                   color: "var(--blue)" },
+    ];
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 28, textTransform: "uppercase" } },
+        "by the numbers"
+      ),
+      e("div", { style: { display: "flex", flexDirection: "column", gap: 20, width: "100%", maxWidth: 380 } },
+        ...stats.map((s, i) =>
+          e("div", {
+            key: s.label,
+            className: "wr-fade-up",
+            style: { animationDelay: `${0.1 + i * 0.12}s` },
+          },
+            e("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" } },
+              e("div", { className: "wr-count-pop", style: { fontSize: 48, fontWeight: 700, color: s.color, lineHeight: 1, letterSpacing: -2, animationDelay: `${0.15 + i * 0.12}s` } },
+                e(AnimCounter, { target: s.val || 0, duration: 1000, delay: 200 + i * 120 })
+              ),
+              e(YoYBadge, { current: s.val || 0, prev: s.prev || 0 })
+            ),
+            e("div", { style: { fontSize: 13, color: "var(--t4)", marginTop: 2 } }, s.label)
+          )
+        )
+      )
+    );
+  }
+
+  // ── Slide 2: Top contributors by posts + replies ───────────────────────────
+  function CommSlideTopContributors({ d }) {
+    const list = (d.top_contributors || []).slice(0, 5);
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 28, textTransform: "uppercase" } },
+        "top contributors"
+      ),
+      e("div", { style: { width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 14 } },
+        ...list.map((u, i) =>
+          e("div", {
+            key: u.user_id || i,
+            className: "wr-fade-up",
+            style: { display: "flex", alignItems: "center", gap: 14, animationDelay: `${0.1 + i * 0.1}s` },
+          },
+            e("div", { style: { width: 24, textAlign: "right", fontSize: 14, fontWeight: 600, color: i === 0 ? "var(--amber)" : "var(--t4)", flexShrink: 0 } },
+              `#${i + 1}`
+            ),
+            e(CommunityAvatar, { user: u, size: 40 }),
+            e("div", { style: { flex: 1, minWidth: 0 } },
+              e("div", { style: { fontSize: 14, fontWeight: 600, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                `@${u.username}`
+              ),
+              e("div", { style: { fontSize: 12, color: "var(--t4)", marginTop: 2 } },
+                `${(u.post_count || 0).toLocaleString()} posts · ${(u.reply_count || 0).toLocaleString()} replies`
+              )
+            ),
+            e("div", { style: { fontSize: 18, fontWeight: 700, color: "var(--ac)", flexShrink: 0 } },
+              (u.total || 0).toLocaleString()
+            )
+          )
+        )
+      )
+    );
+  }
+
+  // ── Slide 3: Top contributors by reactions ────────────────────────────────
+  function CommSlideReactionLeaders({ d }) {
+    const received = (d.top_reactions_received || []).slice(0, 5);
+    const given    = (d.top_reactions_given    || []).slice(0, 5);
+
+    function ReactionList({ list, label, color, countKey }) {
+      return e("div", { style: { flex: 1, minWidth: 0 } },
+        e("div", { style: { fontSize: 10, letterSpacing: 2, color: "var(--t5)", textTransform: "uppercase", marginBottom: 12 } },
+          label
+        ),
+        e("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          ...list.map((u, i) =>
+            e("div", {
+              key: u.user_id || i,
+              className: "wr-fade-up",
+              style: { display: "flex", alignItems: "center", gap: 8, animationDelay: `${0.15 + i * 0.08}s` },
+            },
+              e(CommunityAvatar, { user: u, size: 30 }),
+              e("div", { style: { flex: 1, minWidth: 0 } },
+                e("div", { style: { fontSize: 12, fontWeight: 500, color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                  `@${u.username}`
+                )
+              ),
+              e("div", { style: { fontSize: 13, fontWeight: 600, color, flexShrink: 0 } },
+                (u[countKey] || 0).toLocaleString()
+              )
+            )
+          )
+        )
+      );
+    }
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 28, textTransform: "uppercase" } },
+        "reaction leaders"
+      ),
+      e("div", { style: { display: "flex", gap: 24, width: "100%", maxWidth: 420 } },
+        e(ReactionList, { list: received, label: "most received", color: "var(--pink)",  countKey: "reactions_received" }),
+        e("div", { style: { width: "0.5px", background: "var(--b1)", flexShrink: 0 } }),
+        e(ReactionList, { list: given,    label: "most given",    color: "var(--amber)", countKey: "reactions_given"    })
+      )
+    );
+  }
+
+  // ── Slide 4: Most active space ────────────────────────────────────────────
+  function CommSlideTopSpace({ d }) {
+    const space      = (d.top_spaces || [])[0];
+    const totalPosts = d.total_posts || 1;
+
+    if (!space) return e(Slide, null,
+      e("div", { style: { fontSize: 14, color: "var(--t4)" } }, "No space data available.")
+    );
+
+    const pct = Math.round((space.post_count || 0) / totalPosts * 100);
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "most active space"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 52, fontWeight: 700, color: "var(--ac)", lineHeight: 1.1, letterSpacing: -2, animationDelay: "0.1s", maxWidth: 360, textAlign: "center" } },
+        space.name
+      ),
+      e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t3)", marginTop: 10, animationDelay: "0.25s" } },
+        `${(space.post_count || 0).toLocaleString()} posts · ${pct}% of all forum activity`
+      ),
+      e("div", {
+        className: "wr-fade-up",
+        style: { width: "100%", maxWidth: 320, height: 6, background: "var(--s3)", borderRadius: 3, overflow: "hidden", marginTop: 28, animationDelay: "0.4s" },
+      },
+        e(AnimBar, { pct, color: "var(--ac)", delay: 400 })
+      ),
+      (d.top_spaces || []).length > 1 && e("div", {
+        className: "wr-fade-up",
+        style: { display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 320, marginTop: 24, animationDelay: "0.5s" },
+      },
+        ...(d.top_spaces || []).slice(1, 3).map((s, i) => {
+          const sp = Math.round((s.post_count || 0) / totalPosts * 100);
+          return e("div", { key: s.space_id || i, style: { display: "flex", alignItems: "center", gap: 12 } },
+            e("div", { style: { width: 90, textAlign: "right", fontSize: 12, color: "var(--t3)", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+              s.name
+            ),
+            e("div", { style: { flex: 1, height: 4, background: "var(--s3)", borderRadius: 2, overflow: "hidden" } },
+              e(AnimBar, { pct: sp, color: "var(--t4)", delay: 500 + i * 80 })
+            ),
+            e("div", { style: { width: 40, fontSize: 11, color: "var(--t4)", flexShrink: 0 } },
+              (s.post_count || 0).toLocaleString()
+            )
+          );
+        })
+      )
+    );
+  }
+
+  // ── Slide 5: Top tags cloud ───────────────────────────────────────────────
+  function CommSlideTopTags({ d }) {
+    const tags   = (d.top_tags || []).slice(0, 5);
+    const maxCnt = tags.length > 0 ? Math.max(...tags.map(t => t.post_count || 1)) : 1;
+
+    // Scale font size 18–42px based on relative post count
+    function tagSize(count) {
+      const ratio = (count || 1) / maxCnt;
+      return Math.round(18 + ratio * 24);
+    }
+
+    // Colors cycling through accent palette when tag has no custom color
+    const FALLBACK_COLORS = ["var(--ac)", "var(--pink)", "var(--green)", "var(--blue)", "var(--amber)"];
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 36, textTransform: "uppercase" } },
+        "most active tags"
+      ),
+      e("div", {
+        style: { display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", alignItems: "center", maxWidth: 400 },
+      },
+        ...tags.map((tag, i) => {
+          const size  = tagSize(tag.post_count);
+          const color = tag.color && tag.color !== "" ? tag.color : FALLBACK_COLORS[i % FALLBACK_COLORS.length];
+          // Derive a readable background from the color
+          return e("div", {
+            key: tag.tag_id || i,
+            className: "wr-pill-pop",
+            style: {
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              padding: `${Math.round(size * 0.3)}px ${Math.round(size * 0.5)}px`,
+              borderRadius: 999,
+              background: `${color}18`,
+              border: `0.5px solid ${color}44`,
+              animationDelay: `${0.1 + i * 0.1}s`,
+              cursor: "default",
+            },
+          },
+            e("span", { style: { fontSize: size, fontWeight: 700, color, lineHeight: 1 } },
+              tag.name
+            ),
+            e("span", { style: { fontSize: 11, color: "var(--t4)", lineHeight: 1 } },
+              `${(tag.post_count || 0).toLocaleString()} posts`
+            )
+          );
+        })
+      )
+    );
+  }
+
+  // ── Slide 6: Most discussed thread ───────────────────────────────────────
+  function CommSlideMostDiscussed({ d, navigate }) {
+    const post = d.most_discussed;
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "most discussed"
+      ),
+      e("i", { className: "fa-solid fa-comments wr-count-pop", style: { fontSize: 48, color: "var(--blue)", animationDelay: "0.1s" } }),
+      post
+        ? e("div", { className: "wr-fade-up", style: { marginTop: 20, width: "100%", maxWidth: 380, animationDelay: "0.25s" } },
+            e("div", {
+              style: {
+                background: "var(--s2)", border: "0.5px solid var(--b1)",
+                borderRadius: 14, padding: "20px 22px", cursor: "pointer",
+              },
+              onClick: () => navigate("post", { id: post.id }),
+            },
+              e("div", { style: { fontSize: 16, fontWeight: 600, color: "var(--t1)", lineHeight: 1.4, marginBottom: 10 } },
+                post.title
+              ),
+              e("div", { style: { display: "flex", gap: 16, fontSize: 12, color: "var(--t4)" } },
+                e("span", null,
+                  e("i", { className: "fa-solid fa-reply", style: { marginRight: 5, fontSize: 11 } }),
+                  `${(post.reply_count || 0).toLocaleString()} replies`
+                ),
+                e("span", null,
+                  e("i", { className: "fa-solid fa-user", style: { marginRight: 5, fontSize: 11 } }),
+                  `@${post.username}`
+                )
+              )
+            ),
+            e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 10, textAlign: "center" } },
+              "tap to open thread"
+            )
+          )
+        : e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t4)", marginTop: 20 } },
+            "No thread data available."
+          )
+    );
+  }
+
+  // ── Slide 7: Most loved post ──────────────────────────────────────────────
+  function CommSlideMostLoved({ d, navigate }) {
+    const post = d.most_loved_post;
+
+    return e(Slide, null,
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase" } },
+        "most loved post"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 72, animationDelay: "0.1s" } }, "❤️"),
+      post
+        ? e("div", { className: "wr-fade-up", style: { marginTop: 16, animationDelay: "0.25s" } },
+            e("div", { className: "wr-count-pop", style: { fontSize: 56, fontWeight: 700, color: "var(--pink)", lineHeight: 1, letterSpacing: -2, animationDelay: "0.2s" } },
+              e(AnimCounter, { target: post.reaction_count || 0, duration: 1000, delay: 300 })
+            ),
+            e("div", { style: { fontSize: 14, color: "var(--t3)", marginTop: 6 } }, "reactions"),
+            e("div", {
+              style: {
+                background: "var(--s2)", border: "0.5px solid var(--b1)",
+                borderRadius: 14, padding: "16px 20px", marginTop: 20,
+                maxWidth: 360, cursor: "pointer",
+              },
+              onClick: () => navigate("post", { id: post.id }),
+            },
+              e("div", { style: { fontSize: 14, fontWeight: 500, color: "var(--t1)", lineHeight: 1.4, marginBottom: 8 } },
+                post.title
+              ),
+              e("div", { style: { fontSize: 12, color: "var(--t4)" } },
+                `by @${post.username}`
+              )
+            ),
+            e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 10 } }, "tap to open post")
+          )
+        : e("div", { className: "wr-fade-up", style: { fontSize: 14, color: "var(--t4)", marginTop: 20 } },
+            "No post data available."
+          )
+    );
+  }
+
+  // ── Slide 8: Outro ────────────────────────────────────────────────────────
+  function CommSlideOutro({ d, year, currentUser, navigate }) {
+    return e(Slide, null,
+      e(ConfettiBurst, { active: true }),
+      e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.05s" } },
+        "that's a wrap"
+      ),
+      e("div", { className: "wr-count-pop", style: { fontSize: 44, fontWeight: 700, color: "var(--t1)", lineHeight: 1.2, maxWidth: 320, animationDelay: "0.15s" } },
+        `Thank you for making ${year} special. 🙏`
+      ),
+      e("div", { className: "wr-fade-up", style: { marginTop: 32, animationDelay: "0.35s" } },
+        currentUser
+          ? e("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10 } },
+              e("div", { style: { fontSize: 14, color: "var(--t3)", marginBottom: 4 } },
+                "Now see your own personal Wrapped."
+              ),
+              e("button", {
+                onClick: () => navigate("profile", { username: currentUser.username, tab: "wrapped" }),
+                style: {
+                  padding: "10px 28px", borderRadius: 24,
+                  background: "var(--ac)", border: "none",
+                  color: "var(--ac-on)", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                },
+              }, `View my ${year} Wrapped`)
+            )
+          : e("div", { style: { fontSize: 13, color: "var(--t4)", maxWidth: 300, lineHeight: 1.6, textAlign: "center" } },
+              `Please log in to view your personal ${year} Wrapped.`
+            )
+      )
+    );
+  }
+
+  // ── WrappedCommunityPage root ─────────────────────────────────────────────
+  function WrappedCommunityPage({ year: yearParam, currentUser, navigate }) {
+    const [state,   setState]   = useState({ status: "loading" });
+    const [current, setCurrent] = useState(0);
+    const [key,     setKey]     = useState(0);
+
+    const year = Number(yearParam) || new Date().getFullYear();
+
+    useEffect(() => {
+      apiFetch(`/community/${year}`)
+        .then(d => {
+          if (d.data) setState({ status: "ready", data: d.data });
+          else setState({ status: "error", code: d.error || "unknown" });
+        })
+        .catch(() => setState({ status: "error", code: "network_error" }));
+    }, [year]);
+
+    const go = (n) => { setCurrent(n); setKey(k => k + 1); };
+
+    if (state.status === "loading") return e("div", {
+      style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
+    }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 24, color: "var(--ac)" } }));
+
+    if (state.status === "error") {
+      const msgs = { not_generated: "Community Wrapped hasn't been generated yet.", network_error: "Could not load. Check your connection." };
+      return e("div", {
+        style: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, background: "var(--bg)", padding: 32 },
+      },
+        e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 28, color: "var(--amber)" } }),
+        e("div", { style: { fontSize: 15, color: "var(--t2)" } }, msgs[state.code] || "Something went wrong."),
+        e("button", {
+          onClick: () => navigate("feed"),
+          style: { fontSize: 13, padding: "7px 18px", borderRadius: 8, background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)", cursor: "pointer", fontFamily: "inherit", marginTop: 8 },
+        }, "Go to feed")
+      );
+    }
+
+    const d          = state.data.community || {};
+    const forumName  = d.forum_name || String(year);
+
+    const slides = [
+      e(CommSlideIntro,          { key: `c0-${key}`, d, forumName }),
+      e(CommSlideNumbers,        { key: `c1-${key}`, d }),
+      e(CommSlideTopContributors,{ key: `c2-${key}`, d }),
+      e(CommSlideReactionLeaders,{ key: `c3-${key}`, d }),
+      e(CommSlideTopSpace,       { key: `c4-${key}`, d }),
+      e(CommSlideTopTags,        { key: `c5-${key}`, d }),
+      e(CommSlideMostDiscussed,  { key: `c6-${key}`, d, navigate }),
+      e(CommSlideMostLoved,      { key: `c7-${key}`, d, navigate }),
+      e(CommSlideOutro,          { key: `c8-${key}`, d, year, currentUser, navigate }),
+    ];
+
+    return e("div", { style: { position: "relative", minHeight: "100vh", background: "var(--bg)" } },
+      slides[current],
+      e(SlideNav, {
+        current,
+        total: slides.length,
+        onPrev: () => go(Math.max(0, current - 1)),
+        onNext: () => go(Math.min(slides.length - 1, current + 1)),
+      })
+    );
+  }
+
+  // ── Community landing redirect ────────────────────────────────────────────
+  function WrappedCommunityLandingPage({ currentUser, navigate }) {
+    useEffect(() => {
+      const year = new Date().getFullYear();
+      const match = NE.matchRoute(`/wrapped/community/${year}`);
+      if (window._nexusNavigate && match) {
+        window._nexusNavigate("ext-route", { _match: match, year: String(year) });
+      }
+    }, []);
+    return e("div", {
+      style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
+    }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 20, color: "var(--ac)" } }));
+  }
+
+  // =========================================================================
   // REGISTRATIONS
   // =========================================================================
 
@@ -1656,9 +2308,11 @@
     }, e("i", { className: "fa-solid fa-spinner fa-spin", style: { fontSize: 20 } }));
   }
 
-  // ── Route ─────────────────────────────────────────────────────────────────
-  NE.registerRoute("/wrapped", WrappedLandingPage, { title: "Wrapped" });
-  NE.registerRoute("/wrapped/:year/:username", WrappedPage, { title: "Wrapped" });
+  // ── Routes ────────────────────────────────────────────────────────────────
+  NE.registerRoute("/wrapped",                        WrappedLandingPage,          { title: "Wrapped" });
+  NE.registerRoute("/wrapped/community",              WrappedCommunityLandingPage, { title: "Community Wrapped" });
+  NE.registerRoute("/wrapped/community/:year",        WrappedCommunityPage,        { title: "Community Wrapped" });
+  NE.registerRoute("/wrapped/:year/:username",        WrappedPage,                 { title: "Wrapped" });
 
   // ── Profile tab ───────────────────────────────────────────────────────────
   WrappedProfileTab.tabId    = "wrapped";
@@ -1762,6 +2416,17 @@
     label:     "Wrapped",
     icon:      "fa-wand-sparkles",
     component: WrappedAdminPanel,
+  });
+
+  // ── Community sidebar widget ──────────────────────────────────────────────
+  // pages: "global" — appears on every page, admin-configurable per-page in Layout.
+  // Self-hides if no community result exists or today > widget_hide_after.
+  NE.registerRightWidget({
+    id:        "wrapped-community",
+    label:     "Community Wrapped",
+    component: WrappedCommunityWidget,
+    priority:  15,
+    pages:     "global",
   });
 
 })();

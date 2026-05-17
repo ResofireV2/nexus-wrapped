@@ -110,6 +110,32 @@ defmodule NexusWrapped.WrappedController do
     end
   end
 
+  # ── GET /community/:year — public community slideshow data ───────────────
+  # Used by the sidebar widget (to know whether to show) and the community
+  # slideshow page (to populate slides). Returns nil if not yet generated.
+
+  def community_show(conn, %{"year" => year_str}) do
+    year   = String.to_integer(year_str)
+    result = Repo.get_by(NexusWrapped.CommunityResult, year: year)
+
+    if is_nil(result) do
+      conn |> put_status(404) |> json(%{error: "not_generated"})
+    else
+      ext      = Nexus.Extensions.get_extension_by_slug("wrapped")
+      settings = if ext, do: ext.settings || %{}, else: %{}
+
+      json(conn, %{
+        data: %{
+          year:            result.year,
+          generated_at:    DateTime.to_iso8601(result.generated_at),
+          post_id:         result.post_id,
+          widget_hide_after: settings["widget_hide_after"],
+          community:       result.data,
+        }
+      })
+    end
+  end
+
   # ── Helpers ───────────────────────────────────────────────────────────────
 
   defp extract_summary(data) when is_map(data) do

@@ -34,24 +34,26 @@ defmodule NexusWrapped do
   @impl true
   def settings_schema do
     %{
-      "enabled"              => %{"type" => "boolean", "label" => "Enable Wrapped",         "default" => true},
-      "sharing_default"      => %{"type" => "boolean", "label" => "Share by default",       "default" => false},
+      "enabled"              => %{"type" => "boolean", "label" => "Enable Wrapped",          "default" => true},
+      "sharing_default"      => %{"type" => "boolean", "label" => "Share by default",        "default" => false},
       "min_posts_threshold"  => %{"type" => "number",  "label" => "Minimum posts to qualify","default" => 5},
-      "show_gamepedia_slide" => %{"type" => "boolean", "label" => "Show Gamepedia slide",    "default" => true},
-      "show_dms_slide"       => %{"type" => "boolean", "label" => "Show DMs slide",          "default" => true},
-      "forum_name_override"  => %{"type" => "string",  "label" => "Forum name override",     "default" => ""},
+      "show_gamepedia_slide" => %{"type" => "boolean", "label" => "Show Gamepedia slide",     "default" => true},
+      "show_dms_slide"       => %{"type" => "boolean", "label" => "Show DMs slide",           "default" => true},
+      "forum_name_override"  => %{"type" => "string",  "label" => "Forum name override",      "default" => ""},
       "send_notification_email" => %{"type" => "boolean", "label" => "Send notification email when ready", "default" => true},
+      "widget_hide_after"       => %{"type" => "string",  "label" => "Hide community widget after (YYYY-MM-DD)", "default" => ""},
+      "community_post_space_id" => %{"type" => "number",  "label" => "Community post space ID", "default" => nil},
     }
   end
 
   @impl true
   def settings_tabs do
     [
-      %{"key" => "generation",  "label" => "Generation",  "icon" => "fa-wand-magic-sparkles",
-        "fields" => []},
-      %{"key" => "visibility",  "label" => "Visibility",  "icon" => "fa-eye",
+      %{"key" => "generation",   "label" => "Generation",   "icon" => "fa-wand-magic-sparkles",
+        "fields" => ["widget_hide_after", "community_post_space_id"]},
+      %{"key" => "visibility",   "label" => "Visibility",   "icon" => "fa-eye",
         "fields" => ["enabled", "sharing_default", "min_posts_threshold"]},
-      %{"key" => "content",     "label" => "Content",     "icon" => "fa-layer-group",
+      %{"key" => "content",      "label" => "Content",      "icon" => "fa-layer-group",
         "fields" => ["forum_name_override", "show_gamepedia_slide", "show_dms_slide"]},
       %{"key" => "notifications","label" => "Notifications","icon" => "fa-bell",
         "fields" => ["send_notification_email"]},

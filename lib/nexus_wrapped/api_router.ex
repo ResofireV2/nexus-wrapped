@@ -42,10 +42,13 @@ defmodule NexusWrapped.ApiRouter do
   end
 
   # ── Public routes — catch-all last ────────────────────────────────────────
+  # /community/:year must be declared before /:year/:username so Phoenix
+  # matches it first (declaration order wins for same-depth param routes).
 
   scope "/" do
     pipe_through :api
 
+    get "/community/:year", NexusWrapped.WrappedController, :community_show
     get "/:year/:username", NexusWrapped.WrappedController, :show
   end
 

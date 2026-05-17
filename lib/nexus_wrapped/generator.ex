@@ -786,7 +786,8 @@ defmodule NexusWrapped.Generator do
     prev_from = Date.new!(year - 1, 1, 1)
     prev_to   = Date.new!(year - 1, 12, 31)
 
-    # Forum-wide totals for the year
+    # ── Current year totals ───────────────────────────────────────────────────
+
     total_posts =
       Repo.aggregate(
         from(p in "posts",
@@ -805,7 +806,14 @@ defmodule NexusWrapped.Generator do
         ), :count
       ) || 0
 
-    # New members joined this year
+    total_reactions =
+      Repo.aggregate(
+        from(r in "reactions",
+          where: fragment("?::date", r.inserted_at) >= ^from_date
+            and fragment("?::date", r.inserted_at) <= ^to_date
+        ), :count
+      ) || 0
+
     new_members =
       Repo.aggregate(
         from(u in "users",
@@ -814,7 +822,6 @@ defmodule NexusWrapped.Generator do
         ), :count
       ) || 0
 
-    # Active members (posted at least once)
     active_members =
       Repo.one(
         from p in "posts",
@@ -824,28 +831,132 @@ defmodule NexusWrapped.Generator do
         select: count(p.user_id, :distinct)
       ) || 0
 
-    # Top posters
-    top_posters =
-      Repo.all(
+    # ── Previous year totals (YoY comparisons) ────────────────────────────────
+
+    prev_total_posts =
+      Repo.aggregate(
+        from(p in "posts",
+          where: p.hidden == false
+            and fragment("?::date", p.inserted_at) >= ^prev_from
+            and fragment("?::date", p.inserted_at) <= ^prev_to
+        ), :count
+      ) || 0
+
+    prev_total_replies =
+      Repo.aggregate(
+        from(r in "replies",
+          where: r.hidden == false
+            and fragment("?::date", r.inserted_at) >= ^prev_from
+            and fragment("?::date", r.inserted_at) <= ^prev_to
+        ), :count
+      ) || 0
+
+    prev_total_reactions =
+      Repo.aggregate(
+        from(r in "reactions",
+          where: fragment("?::date", r.inserted_at) >= ^prev_from
+            and fragment("?::date", r.inserted_at) <= ^prev_to
+        ), :count
+      ) || 0
+
+    prev_active_members =
+      Repo.one(
         from p in "posts",
-        join: u in "users", on: u.id == p.user_id,
         where: p.hidden == false
-          and fragment("?::date", p.inserted_at) >= ^from_date
-          and fragment("?::date", p.inserted_at) <= ^to_date,
+          and fragment("?::date", p.inserted_at) >= ^prev_from
+          and fragment("?::date", p.inserted_at) <= ^prev_to,
+        select: count(p.user_id, :distinct)
+      ) || 0
+
+    # ── Top contributors by combined post + reply count ───────────────────────
+    # Driven from user_daily_stats to avoid a heavy posts+replies union.
+
+    top_contributors =
+      Repo.all(
+        from s in "user_daily_stats",
+        join: u in "users", on: u.id == s.user_id,
+        where: s.date >= ^from_date and s.date <= ^to_date,
         group_by: [u.id, u.username, u.avatar_url, u.avatar_color],
-        order_by: [desc: count(p.id)],
+        order_by: [desc: coalesce(sum(s.posts_count), 0) + coalesce(sum(s.replies_count), 0)],
         limit: 5,
         select: %{
           user_id:      u.id,
           username:     u.username,
           avatar_url:   u.avatar_url,
           avatar_color: u.avatar_color,
-          post_count:   count(p.id),
+          post_count:   coalesce(sum(s.posts_count), 0),
+          reply_count:  coalesce(sum(s.replies_count), 0),
+          total:        coalesce(sum(s.posts_count), 0) + coalesce(sum(s.replies_count), 0),
         }
       )
       |> Enum.map(&stringify_map/1)
 
-    # Most active space
+    # ── Top 5 by reactions received ───────────────────────────────────────────
+
+    top_reactions_received =
+      Repo.all(
+        from s in "user_daily_stats",
+        join: u in "users", on: u.id == s.user_id,
+        where: s.date >= ^from_date and s.date <= ^to_date,
+        group_by: [u.id, u.username, u.avatar_url, u.avatar_color],
+        order_by: [desc: coalesce(sum(s.reactions_received), 0)],
+        limit: 5,
+        select: %{
+          user_id:           u.id,
+          username:          u.username,
+          avatar_url:        u.avatar_url,
+          avatar_color:      u.avatar_color,
+          reactions_received: coalesce(sum(s.reactions_received), 0),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # ── Top 5 by reactions given ──────────────────────────────────────────────
+
+    top_reactions_given =
+      Repo.all(
+        from s in "user_daily_stats",
+        join: u in "users", on: u.id == s.user_id,
+        where: s.date >= ^from_date and s.date <= ^to_date,
+        group_by: [u.id, u.username, u.avatar_url, u.avatar_color],
+        order_by: [desc: coalesce(sum(s.reactions_given), 0)],
+        limit: 5,
+        select: %{
+          user_id:        u.id,
+          username:       u.username,
+          avatar_url:     u.avatar_url,
+          avatar_color:   u.avatar_color,
+          reactions_given: coalesce(sum(s.reactions_given), 0),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # ── Top 5 tags for the year ───────────────────────────────────────────────
+    # Join post_tags -> posts (year-filtered, not hidden) -> tags for name/color.
+
+    top_tags =
+      Repo.all(
+        from pt in "post_tags",
+        join: p  in "posts", on: p.id == pt.post_id,
+        join: t  in "tags",  on: t.id == pt.tag_id,
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        group_by: [t.id, t.name, t.slug, t.color],
+        order_by: [desc: count(pt.post_id)],
+        limit: 5,
+        select: %{
+          tag_id:     t.id,
+          name:       t.name,
+          slug:       t.slug,
+          color:      t.color,
+          post_count: count(pt.post_id),
+        }
+      )
+      |> Enum.map(&stringify_map/1)
+
+    # ── Most active space ─────────────────────────────────────────────────────
+
     top_spaces =
       Repo.all(
         from p in "posts",
@@ -865,29 +976,8 @@ defmodule NexusWrapped.Generator do
       )
       |> Enum.map(&stringify_map/1)
 
-    # Most reacted post of the year
-    most_reacted_post =
-      Repo.one(
-        from p in "posts",
-        where: p.hidden == false
-          and fragment("?::date", p.inserted_at) >= ^from_date
-          and fragment("?::date", p.inserted_at) <= ^to_date,
-        order_by: [desc: p.reply_count],
-        limit: 1,
-        select: %{id: p.id, title: p.title, reply_count: p.reply_count, user_id: p.user_id}
-      )
-      |> then(fn p -> if p, do: stringify_map(p), else: nil end)
+    # ── Most discussed thread (most replies) ──────────────────────────────────
 
-    # Total reactions forum-wide
-    total_reactions =
-      Repo.aggregate(
-        from(r in "reactions",
-          where: fragment("?::date", r.inserted_at) >= ^from_date
-            and fragment("?::date", r.inserted_at) <= ^to_date
-        ), :count
-      ) || 0
-
-    # Most discussed thread (most replies)
     most_discussed =
       Repo.one(
         from p in "posts",
@@ -906,7 +996,29 @@ defmodule NexusWrapped.Generator do
       )
       |> then(fn p -> if p, do: stringify_map(p), else: nil end)
 
-    # Posts per month breakdown
+    # ── Most loved post (highest reaction_count on a single post) ─────────────
+
+    most_loved_post =
+      Repo.one(
+        from p in "posts",
+        join: u in "users", on: u.id == p.user_id,
+        where: p.hidden == false
+          and fragment("?::date", p.inserted_at) >= ^from_date
+          and fragment("?::date", p.inserted_at) <= ^to_date,
+        order_by: [desc: p.reaction_count],
+        limit: 1,
+        select: %{
+          id:             p.id,
+          title:          p.title,
+          reaction_count: p.reaction_count,
+          reply_count:    p.reply_count,
+          username:       u.username,
+        }
+      )
+      |> then(fn p -> if p, do: stringify_map(p), else: nil end)
+
+    # ── Posts per month breakdown ─────────────────────────────────────────────
+
     posts_per_month =
       Repo.all(
         from p in "posts",
@@ -922,39 +1034,28 @@ defmodule NexusWrapped.Generator do
       |> Enum.into(%{})
       |> then(fn m -> Enum.map(1..12, fn month -> Map.get(m, month, 0) end) end)
 
-    # Previous year totals for YoY comparison in the banner
-    prev_total_posts =
-      Repo.aggregate(
-        from(p in "posts",
-          where: p.hidden == false
-            and fragment("?::date", p.inserted_at) >= ^prev_from
-            and fragment("?::date", p.inserted_at) <= ^prev_to
-        ), :count
-      ) || 0
-
-    prev_active_members =
-      Repo.one(
-        from p in "posts",
-        where: p.hidden == false
-          and fragment("?::date", p.inserted_at) >= ^prev_from
-          and fragment("?::date", p.inserted_at) <= ^prev_to,
-        select: count(p.user_id, :distinct)
-      ) || 0
+    forum_name = resolve_forum_name(settings)
 
     %{
-      "year"                => year,
-      "total_posts"         => total_posts,
-      "total_replies"       => total_replies,
-      "new_members"         => new_members,
-      "active_members"      => active_members,
-      "total_reactions"     => total_reactions,
-      "top_posters"         => top_posters,
-      "top_spaces"          => top_spaces,
-      "most_discussed"      => most_discussed,
-      "most_reacted_post"   => most_reacted_post,
-      "posts_per_month"     => posts_per_month,
-      "prev_total_posts"    => prev_total_posts,
-      "prev_active_members" => prev_active_members,
+      "forum_name"             => forum_name,
+      "year"                   => year,
+      "total_posts"            => total_posts,
+      "total_replies"          => total_replies,
+      "total_reactions"        => total_reactions,
+      "new_members"            => new_members,
+      "active_members"         => active_members,
+      "prev_total_posts"       => prev_total_posts,
+      "prev_total_replies"     => prev_total_replies,
+      "prev_total_reactions"   => prev_total_reactions,
+      "prev_active_members"    => prev_active_members,
+      "top_contributors"       => top_contributors,
+      "top_reactions_received" => top_reactions_received,
+      "top_reactions_given"    => top_reactions_given,
+      "top_tags"               => top_tags,
+      "top_spaces"             => top_spaces,
+      "most_discussed"         => most_discussed,
+      "most_loved_post"        => most_loved_post,
+      "posts_per_month"        => posts_per_month,
     }
   end
 
@@ -977,97 +1078,83 @@ defmodule NexusWrapped.Generator do
   def generate_community_banner(data, settings) do
     year       = data["year"]
     forum_name = resolve_forum_name(settings)
-    {name_size, name_spacing} = name_font_params(forum_name)
+    forum_upper = String.upcase(forum_name)
 
-    # Compute percentage change labels from YoY data
-    posts_label     = yoy_label(data["total_posts"],    data["prev_total_posts"])
-    members_label   = yoy_label(data["active_members"], data["prev_active_members"])
-    reactions_label = format_count(data["total_reactions"] || 0)
+    # Scale forum name letter-spacing so long names still fit comfortably
+    name_spacing =
+      cond do
+        String.length(forum_name) <= 20 -> "5"
+        String.length(forum_name) <= 34 -> "3"
+        true                            -> "1"
+      end
 
     svg = """
-    <svg xmlns="http://www.w3.org/2000/svg" width="680" height="280" viewBox="0 0 680 280">
-      <rect width="680" height="280" rx="16" fill="#080810"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="680" height="200" viewBox="0 0 680 200">
+      <rect width="680" height="200" fill="#080812"/>
 
-      <line x1="340" y1="140" x2="100" y2="20"  stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="580" y2="20"  stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="40"  y2="140" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="640" y2="140" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="100" y2="260" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="580" y2="260" stroke="#a78bfa" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="200" y2="20"  stroke="#f472b6" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="480" y2="20"  stroke="#f472b6" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="200" y2="260" stroke="#f472b6" stroke-width="1" opacity="0.12"/>
-      <line x1="340" y1="140" x2="480" y2="260" stroke="#f472b6" stroke-width="1" opacity="0.12"/>
+      <!-- Top-left burst -->
+      <rect x="220" y="38"  width="8"  height="22" rx="2" fill="#fbbf24" transform="rotate(-40,224,49)"/>
+      <rect x="190" y="55"  width="6"  height="16" rx="2" fill="#f472b6" transform="rotate(-55,193,63)"/>
+      <rect x="250" y="28"  width="5"  height="14" rx="2" fill="#60a5fa" transform="rotate(-25,252,35)"/>
+      <rect x="172" y="40"  width="7"  height="18" rx="2" fill="#34d399" transform="rotate(-65,175,49)"/>
+      <rect x="140" y="60"  width="5"  height="13" rx="2" fill="#a78bfa" transform="rotate(-50,142,66)"/>
+      <rect x="108" y="32"  width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-35,111,40)"/>
+      <rect x="74"  y="50"  width="5"  height="14" rx="2" fill="#f472b6" transform="rotate(-20,76,57)"/>
 
-      <rect x="180" y="35"  width="7" height="19" rx="2" fill="#fbbf24" transform="rotate(30,183,44)"/>
-      <rect x="240" y="22"  width="6" height="17" rx="2" fill="#a78bfa" transform="rotate(-20,243,30)"/>
-      <rect x="320" y="18"  width="7" height="19" rx="2" fill="#f472b6" transform="rotate(10,323,27)"/>
-      <rect x="400" y="22"  width="6" height="17" rx="2" fill="#34d399" transform="rotate(-35,403,30)"/>
-      <rect x="460" y="32"  width="7" height="18" rx="2" fill="#60a5fa" transform="rotate(25,463,41)"/>
-      <rect x="80"  y="40"  width="6" height="17" rx="2" fill="#34d399" transform="rotate(-25,83,48)"/>
-      <rect x="590" y="38"  width="7" height="19" rx="2" fill="#a78bfa" transform="rotate(40,593,47)"/>
-      <rect x="60"  y="230" width="6" height="17" rx="2" fill="#f472b6" transform="rotate(20,63,238)"/>
-      <rect x="130" y="246" width="7" height="18" rx="2" fill="#60a5fa" transform="rotate(-30,133,255)"/>
-      <rect x="450" y="250" width="7" height="18" rx="2" fill="#fbbf24" transform="rotate(-10,453,259)"/>
-      <rect x="610" y="235" width="7" height="18" rx="2" fill="#34d399" transform="rotate(-22,613,244)"/>
-      <rect x="520" y="22"  width="6" height="17" rx="2" fill="#fbbf24" transform="rotate(-15,523,30)"/>
-      <rect x="220" y="250" width="5" height="13" rx="2" fill="#a78bfa" transform="rotate(30,222,256)"/>
-      <rect x="540" y="246" width="6" height="17" rx="2" fill="#f472b6" transform="rotate(35,543,254)"/>
+      <!-- Top-right burst -->
+      <rect x="444" y="38"  width="8"  height="22" rx="2" fill="#a78bfa" transform="rotate(40,448,49)"/>
+      <rect x="474" y="55"  width="6"  height="16" rx="2" fill="#34d399" transform="rotate(55,477,63)"/>
+      <rect x="418" y="28"  width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(25,420,35)"/>
+      <rect x="500" y="40"  width="7"  height="18" rx="2" fill="#f472b6" transform="rotate(65,503,49)"/>
+      <rect x="530" y="60"  width="5"  height="13" rx="2" fill="#60a5fa" transform="rotate(50,532,66)"/>
+      <rect x="566" y="32"  width="6"  height="16" rx="2" fill="#34d399" transform="rotate(35,569,40)"/>
+      <rect x="598" y="52"  width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(22,600,59)"/>
 
-      <circle cx="145" cy="88"  r="2" fill="#fbbf24" opacity="0.7"/>
-      <circle cx="525" cy="72"  r="2" fill="#a78bfa" opacity="0.7"/>
-      <circle cx="88"  cy="175" r="2" fill="#f472b6" opacity="0.7"/>
-      <circle cx="592" cy="185" r="2" fill="#34d399" opacity="0.7"/>
-      <circle cx="210" cy="210" r="2" fill="#60a5fa" opacity="0.7"/>
-      <circle cx="468" cy="205" r="2" fill="#fbbf24" opacity="0.7"/>
+      <!-- Bottom-left burst -->
+      <rect x="220" y="148" width="8"  height="22" rx="2" fill="#60a5fa" transform="rotate(40,224,159)"/>
+      <rect x="190" y="132" width="6"  height="16" rx="2" fill="#a78bfa" transform="rotate(55,193,140)"/>
+      <rect x="160" y="155" width="5"  height="14" rx="2" fill="#fbbf24" transform="rotate(25,162,162)"/>
+      <rect x="120" y="138" width="7"  height="18" rx="2" fill="#f472b6" transform="rotate(65,123,147)"/>
+      <rect x="88"  y="158" width="5"  height="13" rx="2" fill="#34d399" transform="rotate(50,90,164)"/>
+      <rect x="56"  y="145" width="6"  height="16" rx="2" fill="#60a5fa" transform="rotate(30,59,153)"/>
 
-      <circle cx="340" cy="130" r="100" fill="#a78bfa" opacity="0.04"/>
+      <!-- Bottom-right burst -->
+      <rect x="450" y="148" width="8"  height="22" rx="2" fill="#f472b6" transform="rotate(-40,454,159)"/>
+      <rect x="480" y="132" width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-55,483,140)"/>
+      <rect x="512" y="155" width="5"  height="14" rx="2" fill="#a78bfa" transform="rotate(-25,514,162)"/>
+      <rect x="544" y="138" width="7"  height="18" rx="2" fill="#34d399" transform="rotate(-65,547,147)"/>
+      <rect x="580" y="158" width="5"  height="13" rx="2" fill="#60a5fa" transform="rotate(-50,582,164)"/>
+      <rect x="616" y="143" width="6"  height="16" rx="2" fill="#fbbf24" transform="rotate(-30,619,151)"/>
 
-      <text x="340" y="76" text-anchor="middle"
+      <!-- Sparkle dots -->
+      <circle cx="60"  cy="100" r="2.5" fill="#a78bfa" opacity="0.7"/>
+      <circle cx="136" cy="100" r="2"   fill="#fbbf24" opacity="0.6"/>
+      <circle cx="544" cy="100" r="2"   fill="#f472b6" opacity="0.6"/>
+      <circle cx="620" cy="100" r="2.5" fill="#34d399" opacity="0.7"/>
+      <circle cx="340" cy="18"  r="2"   fill="#60a5fa" opacity="0.6"/>
+      <circle cx="340" cy="182" r="2"   fill="#fbbf24" opacity="0.6"/>
+
+      <!-- Forum name -->
+      <text x="340" y="76"
+            text-anchor="middle"
             font-family="system-ui,-apple-system,sans-serif"
-            font-size="#{name_size}" letter-spacing="#{name_spacing}"
-            fill="#5b4d8a">#{String.upcase(forum_name)}</text>
+            font-size="11" letter-spacing="#{name_spacing}" font-weight="400"
+            fill="#6b5fa0">#{forum_upper}</text>
 
-      <text x="340" y="162" text-anchor="middle"
+      <!-- Year -->
+      <text x="340" y="142"
+            text-anchor="middle"
             font-family="system-ui,-apple-system,sans-serif"
-            font-size="88" font-weight="700" letter-spacing="-3"
+            font-size="76" font-weight="700" letter-spacing="-3"
             fill="#ffffff">#{year}</text>
 
-      <text x="340" y="192" text-anchor="middle"
+      <!-- WRAPPED — each letter a different accent color -->
+      <text x="340" y="164"
+            text-anchor="middle"
             font-family="system-ui,-apple-system,sans-serif"
-            font-size="16" letter-spacing="5"
-            fill="#a78bfa">WRAPPED</text>
-
-      <line x1="260" y1="198" x2="420" y2="198" stroke="#a78bfa" stroke-width="1.5" opacity="0.4"/>
-
-      <text x="170" y="232" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="20" font-weight="700" fill="#f472b6">#{posts_label}</text>
-      <text x="170" y="248" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="10" fill="#4a3a6a" letter-spacing="1">POSTS</text>
-
-      <text x="340" y="232" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="20" font-weight="700" fill="#fbbf24">#{members_label}</text>
-      <text x="340" y="248" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="10" fill="#4a3a6a" letter-spacing="1">MEMBERS</text>
-
-      <text x="510" y="232" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="20" font-weight="700" fill="#34d399">#{reactions_label}</text>
-      <text x="510" y="248" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="10" fill="#4a3a6a" letter-spacing="1">REACTIONS</text>
-
-      <line x1="250" y1="224" x2="250" y2="252" stroke="#1e1534" stroke-width="0.5"/>
-      <line x1="425" y1="224" x2="425" y2="252" stroke="#1e1534" stroke-width="0.5"/>
-
-      <rect x="246" y="260" width="188" height="14" rx="7" fill="#a78bfa" opacity="0.15"/>
-      <text x="340" y="271" text-anchor="middle"
-            font-family="system-ui,-apple-system,sans-serif"
-            font-size="10" fill="#a78bfa" letter-spacing="1">TAP TO SEE THE FULL STORY</text>
+            font-size="13" letter-spacing="5" font-weight="600">
+        <tspan fill="#a78bfa">W</tspan><tspan fill="#f472b6">R</tspan><tspan fill="#fbbf24">A</tspan><tspan fill="#34d399">P</tspan><tspan fill="#60a5fa">P</tspan><tspan fill="#a78bfa">E</tspan><tspan fill="#f472b6">D</tspan>
+      </text>
     </svg>
     """
     |> String.trim()
@@ -1086,24 +1173,4 @@ defmodule NexusWrapped.Generator do
       end
     end
   end
-
-  defp name_font_params(name) do
-    len = String.length(name)
-    cond do
-      len <= 20 -> {"12", "4"}
-      len <= 34 -> {"12", "2"}
-      true      -> {"11", "1"}
-    end
-  end
-
-  defp yoy_label(current, prev) when is_integer(current) and is_integer(prev) and prev > 0 do
-    pct = round((current - prev) / prev * 100)
-    sign = if pct >= 0, do: "+", else: ""
-    "#{sign}#{pct}%"
-  end
-  defp yoy_label(current, _prev), do: format_count(current || 0)
-
-  defp format_count(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
-  defp format_count(n) when n >= 1_000,     do: "#{Float.round(n / 1_000, 1)}K"
-  defp format_count(n),                     do: Integer.to_string(n)
 end
