@@ -119,28 +119,91 @@ defmodule NexusWrapped.Scheduler do
       data = NexusWrapped.Generator.generate_community(year, settings)
       now  = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
-        nil ->
-          %NexusWrapped.CommunityResult{}
-          |> NexusWrapped.CommunityResult.changeset(%{
-            year:         year,
-            data:         data,
-            generated_at: now,
-          })
-          |> Repo.insert()
+      # Persist the community result row (activates the sidebar widget)
+      community_result =
+        case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
+          nil ->
+            {:ok, result} =
+              %NexusWrapped.CommunityResult{}
+              |> NexusWrapped.CommunityResult.changeset(%{
+                year:         year,
+                data:         data,
+                generated_at: now,
+              })
+              |> Repo.insert()
+            result
 
-        existing ->
-          existing
-          |> NexusWrapped.CommunityResult.changeset(%{
-            data:         data,
-            generated_at: now,
-          })
-          |> Repo.update()
-      end
+          existing ->
+            {:ok, result} =
+              existing
+              |> NexusWrapped.CommunityResult.changeset(%{
+                data:         data,
+                generated_at: now,
+              })
+              |> Repo.update()
+            result
+        end
 
       Logger.info("[NexusWrapped.Scheduler] Community Wrapped generated for #{year}")
+
+      # Create the community forum post if a default space is configured
+      maybe_create_community_post(community_result, data, year, settings)
     rescue
       e -> Logger.error("[NexusWrapped.Scheduler] Community generation failed: #{inspect(e)}")
+    end
+  end
+
+  defp maybe_create_community_post(community_result, data, year, settings) do
+    space_id =
+      case settings["community_post_space_id"] do
+        nil   -> nil
+        ""    -> nil
+        id when is_integer(id) -> id
+        id when is_binary(id)  ->
+          case Integer.parse(id) do
+            {n, ""} -> n
+            _       -> nil
+          end
+      end
+
+    if is_nil(space_id) do
+      Logger.info("[NexusWrapped.Scheduler] No community_post_space_id set — skipping post creation")
+    else
+      # Use the first admin user as the post author
+      admin = Repo.one(
+        from u in "users",
+        where: u.role == "admin",
+        order_by: [asc: u.id],
+        limit: 1,
+        select: struct(u, [:id, :username, :email, :role, :avatar_url, :avatar_color])
+      )
+
+      if is_nil(admin) do
+        Logger.error("[NexusWrapped.Scheduler] No admin user found — cannot create community post")
+      else
+        body  = NexusWrapped.Generator.build_community_post_body(data, year)
+        title = "#{year} Community Wrapped 🎉"
+
+        case Nexus.Forum.create_post(
+          %{"title" => title, "body" => body, "space_id" => space_id},
+          admin,
+          []
+        ) do
+          {:ok, post} ->
+            Nexus.Forum.pin_post(post, true, "global")
+
+            # Update CommunityResult with the post_id
+            community_result
+            |> NexusWrapped.CommunityResult.changeset(%{post_id: post.id})
+            |> Repo.update()
+
+            Logger.info("[NexusWrapped.Scheduler] Community post created (id=#{post.id}) for #{year}")
+
+          {:error, changeset} ->
+            errors = inspect(changeset.errors)
+            Logger.error("[NexusWrapped.Scheduler] Community post creation failed: #{errors}")
+        end
+      end
     end
   end
 

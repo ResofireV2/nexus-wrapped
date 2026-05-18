@@ -1181,6 +1181,20 @@ defmodule NexusWrapped.Generator do
     svg
   end
 
+  def build_community_post_body(data, year) do
+    wrapped_url = "/ext/wrapped/community/#{year}"
+    intro = data["intro_message"] || "Thank you for an incredible #{year}."
+
+    """
+    #{intro}
+
+    **[→ View the #{year} Community Wrapped](#{wrapped_url})**
+
+    *Your personal #{year} Wrapped is waiting on your profile — check the Wrapped tab to see your own year in review.*
+    """
+    |> String.trim()
+  end
+
   defp interpolate_intro(template, values) do
     base = if is_binary(template) and String.trim(template) != "", do: template, else: @default_intro_message
     Enum.reduce(values, base, fn {key, val}, acc ->

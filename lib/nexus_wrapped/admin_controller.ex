@@ -169,7 +169,7 @@ defmodule NexusWrapped.AdminController do
       wrapped_url = "/ext/wrapped/community/#{year}"
 
       # Plain markdown post — thank you message + link only
-      body  = build_community_post_body(data, year, nil, wrapped_url, settings)
+      body  = NexusWrapped.Generator.build_community_post_body(data, year)
       title = "#{year} Community Wrapped 🎉"
 
       case Nexus.Forum.create_post(
@@ -234,19 +234,6 @@ defmodule NexusWrapped.AdminController do
     end
   end
 
-  defp build_community_post_body(data, year, _banner_url, wrapped_url, _settings) do
-    # intro_message is already interpolated by generate_community — use it directly.
-    intro = data["intro_message"] || "Thank you for an incredible #{year}."
-
-    """
-    #{intro}
-
-    **[→ View the #{year} Community Wrapped](#{wrapped_url})**
-
-    *Your personal #{year} Wrapped is waiting on your profile — check the Wrapped tab to see your own year in review.*
-    """
-    |> String.trim()
-  end
   defp parse_year(nil),     do: Date.utc_today().year
   defp parse_year(y) when is_integer(y), do: y
   defp parse_year(y) when is_binary(y),  do: String.to_integer(y)
