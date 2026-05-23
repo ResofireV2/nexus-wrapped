@@ -23,7 +23,6 @@ defmodule NexusWrapped.Scheduler do
 
   @impl true
   def init(_) do
-    NexusWrapped.ensure_defaults()
     schedule_check()
     {:ok, %{}}
   end
