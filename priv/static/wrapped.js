@@ -108,7 +108,7 @@
 
   // ── Generation tab ────────────────────────────────────────────────────────
 
-  function GenerationTab({ settings, setSetting }) {
+  function GenerationTab() {
     const currentYear = new Date().getFullYear();
     const [year, setYear]               = useState(String(currentYear));
     const [status, setStatus]           = useState(null);
@@ -118,6 +118,41 @@
     const [genError, setGenError]       = useState(null);
     const [simLoading, setSimLoading]   = useState(false);
     const [simError, setSimError]       = useState(null);
+
+    // Settings state — owned by this tab, not shared with siblings.
+    // Each SimpleSettingsPanel sibling tab fetches and saves its own keys
+    // independently; the server merges all patches so they don't clobber each other.
+    const [settings, setSettings] = useState({});
+    const [loaded,   setLoaded]   = useState(false);
+
+    const setSetting = useCallback((key, val) => {
+      setSettings(prev => ({ ...prev, [key]: val }));
+      if (window._nexusAdminSetDirty) window._nexusAdminSetDirty();
+    }, []);
+
+    // Load settings on mount
+    useEffect(() => {
+      loadExtSettings().then(s => {
+        setSettings(s);
+        setLoaded(true);
+      });
+    }, []);
+
+    // Register save fn with the topbar Save Changes button.
+    // Re-registers on every settings change so save() closes over latest state.
+    // Cleanup sets saveFn to null so switching to a SimpleSettingsPanel tab
+    // lets that tab register its own save fn cleanly.
+    useEffect(() => {
+      if (!loaded) return;
+      const save = async () => {
+        const ok = await saveSettings(settings);
+        return ok;
+      };
+      window._nexusAdminSaveFn = save;
+      return () => {
+        if (window._nexusAdminSaveFn === save) window._nexusAdminSaveFn = null;
+      };
+    }, [loaded, settings]);
 
     // Community post state
     const [spaces, setSpaces]               = useState([]);
@@ -550,223 +585,6 @@
         e("strong", { style: { color: "var(--t4)" } }, "Simulate for me"),
         " runs the full generation pipeline for your account synchronously and " +
         "opens your Wrapped immediately so you can preview the result."
-      )
-    );
-  }
-
-  // ── Admin panel root ──────────────────────────────────────────────────────
-  // Renders a tab shell matching TabbedPanel's visual style exactly.
-  // Generation tab: custom JSX above.
-  // Other tabs: SimpleSettingsPanel scoped to their field lists.
-
-  const ADMIN_TABS = [
-    { key: "generation",    label: "Generation",    icon: "fa-wand-magic-sparkles" },
-    { key: "visibility",    label: "Visibility",    icon: "fa-eye"        },
-    { key: "content",       label: "Content",       icon: "fa-layer-group"},
-    { key: "notifications", label: "Notifications", icon: "fa-bell"       },
-  ];
-
-  const TAB_FIELDS = {
-    generation: [
-      { key: "widget_hide_after",       label: "Hide community widget after (YYYY-MM-DD)", type: "string",  default: "",   hint: "The sidebar widget disappears after this date. Leave blank to keep it visible indefinitely." },
-      { key: "community_post_space_id", label: "Community post space ID",                  type: "number",  default: null, hint: "Space to post the optional community announcement post into." },
-    ],
-    visibility: [
-      { key: "enabled",             label: "Enable Wrapped",             type: "boolean", default: true  },
-      { key: "sharing_default",     label: "Share by default",           type: "boolean", default: false },
-      { key: "min_posts_threshold", label: "Minimum posts to qualify",   type: "number",  default: 5     },
-    ],
-    content: [
-      { key: "forum_name_override",  label: "Forum name override",        type: "string",  default: ""    },
-      { key: "show_gamepedia_slide", label: "Show Gamepedia slide",       type: "boolean", default: true  },
-      { key: "show_dms_slide",       label: "Show DMs slide",             type: "boolean", default: true  },
-    ],
-    notifications: [
-      { key: "send_notification_email", label: "Send notification email when ready", type: "boolean", default: true },
-    ],
-  };
-
-  // Tab button style — underline style matching all Nexus admin panels in the screenshots:
-  // active tab gets accent color text + 2px accent bottom border, inactive gets muted text
-  function tabBtnStyle(active) {
-    return {
-      display: "flex", alignItems: "center", gap: 7,
-      padding: "10px 18px",
-      background: "none", border: "none",
-      borderBottom: active ? "2px solid var(--ac)" : "2px solid transparent",
-      color:        active ? "var(--ac-text)"      : "var(--t4)",
-      fontWeight:   active ? 500 : 400,
-      cursor: "pointer", fontFamily: "inherit",
-      fontSize: 13, marginBottom: -1,
-      transition: "color .1s",
-      whiteSpace: "nowrap",
-    };
-  }
-
-  // ── Shared admin field components ─────────────────────────────────────────
-
-  function AdminToggle({ value, onChange }) {
-    return e("div", {
-      onClick: () => onChange(!value),
-      style: {
-        width: 36, height: 20, borderRadius: 10, cursor: "pointer",
-        background: value ? "var(--ac)" : "rgba(255,255,255,0.15)",
-        position: "relative", transition: "background 0.2s", flexShrink: 0,
-      },
-    },
-      e("div", {
-        style: {
-          position: "absolute", top: 2, left: value ? 18 : 2,
-          width: 16, height: 16, borderRadius: "50%",
-          background: "white", transition: "left 0.2s",
-        },
-      })
-    );
-  }
-
-  function AdminField({ label, hint, children }) {
-    return e("div", { style: { marginBottom: 18 } },
-      e("div", { style: { fontSize: 12, fontWeight: 500, color: "var(--t4)", marginBottom: 6 } }, label),
-      children,
-      hint && e("div", { style: { fontSize: 11, color: "var(--t5)", marginTop: 4, lineHeight: 1.5 } }, hint)
-    );
-  }
-
-  function AdminToggleField({ label, hint, value, onChange }) {
-    return e(AdminField, { label, hint },
-      e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-        e(AdminToggle, { value: !!value, onChange })
-      )
-    );
-  }
-
-  // ── WrappedAdminPanel — unified settings state ────────────────────────────
-  // All settings (schedule, message, visibility, content, notifications) live in
-  // one state object. One save fn is registered with _nexusAdminSaveFn so the
-  // top-bar Save Changes button handles everything consistently.
-
-  function WrappedAdminPanel() {
-    const [activeTab, setActiveTab]   = useState("generation");
-    const [settings,  setSettings]    = useState({});
-    const [loaded,    setLoaded]      = useState(false);
-
-    // Load all extension settings on mount
-    useEffect(() => {
-      loadExtSettings().then(s => {
-        setSettings(s);
-        setLoaded(true);
-      });
-    }, []);
-
-    // Update one setting key and signal dirty to the top bar
-    const setSetting = useCallback((key, val) => {
-      setSettings(prev => ({ ...prev, [key]: val }));
-      if (window._nexusAdminSetDirty) window._nexusAdminSetDirty();
-    }, []);
-
-    // The single save fn — PATCHes all settings at once via the core API
-    const save = useCallback(async () => {
-      const ok = await saveSettings(settings);
-      return ok;
-    }, [settings]);
-
-    // Register save fn with the top-bar Save Changes button.
-    // Re-registers whenever settings change so save() always closes over latest state.
-    useEffect(() => {
-      if (!loaded) return;
-      window._nexusAdminSaveFn = save;
-      return () => {
-        if (window._nexusAdminSaveFn === save) window._nexusAdminSaveFn = null;
-      };
-    }, [loaded, save]);
-
-    if (!loaded) return e("div", {
-      style: { padding: "48px 0", textAlign: "center", color: "var(--t5)" },
-    }, e("i", { className: "fa-solid fa-spinner fa-spin" }));
-
-    const s = settings;
-
-    return e("div", null,
-      // Tab bar
-      e("div", {
-        style: {
-          display: "flex", gap: 0, marginBottom: 24,
-          borderBottom: "0.5px solid var(--b1)",
-          overflowX: "auto", WebkitOverflowScrolling: "touch",
-        },
-      },
-        ...ADMIN_TABS.map(t =>
-          e("button", {
-            key:     t.key,
-            onClick: () => setActiveTab(t.key),
-            style:   tabBtnStyle(activeTab === t.key),
-          },
-            e("i", { className: `fa-solid ${t.icon}`, style: { fontSize: 11 } }),
-            t.label
-          )
-        )
-      ),
-
-      // Generation tab — schedule, generate actions, message editor
-      activeTab === "generation" && e(GenerationTab, { settings: s, setSetting }),
-
-      // Visibility tab
-      activeTab === "visibility" && e("div", null,
-        e(AdminToggleField, {
-          label: "Enable Wrapped", value: s.enabled,
-          onChange: v => setSetting("enabled", v),
-        }),
-        e(AdminToggleField, {
-          label: "Share by default", value: s.sharing_default,
-          onChange: v => setSetting("sharing_default", v),
-        }),
-        e(AdminField, { label: "Minimum posts to qualify" },
-          e("input", {
-            type: "number", className: "fi",
-            value: s.min_posts_threshold ?? 5,
-            onChange: ev => setSetting("min_posts_threshold", Number(ev.target.value)),
-            style: { maxWidth: 120 },
-            min: 0,
-          })
-        )
-      ),
-
-      // Content tab
-      activeTab === "content" && e("div", null,
-        e(AdminField, {
-          label: "Forum name override",
-          hint:  "Overrides the site name used in banners and messages. Leave blank to use the site name from General settings.",
-        },
-          e("input", {
-            type: "text", className: "fi",
-            value: s.forum_name_override || "",
-            onChange: ev => setSetting("forum_name_override", ev.target.value),
-            placeholder: "e.g. Nexus Forum",
-            style: { maxWidth: 360 },
-          })
-        ),
-        e(AdminToggleField, {
-          label: "Show Gamepedia slide",
-          hint:  "Includes a slide showing the user's top games if they have Gamepedia activity.",
-          value: s.show_gamepedia_slide,
-          onChange: v => setSetting("show_gamepedia_slide", v),
-        }),
-        e(AdminToggleField, {
-          label: "Show DMs slide",
-          hint:  "Includes a slide with direct message stats.",
-          value: s.show_dms_slide,
-          onChange: v => setSetting("show_dms_slide", v),
-        })
-      ),
-
-      // Notifications tab
-      activeTab === "notifications" && e("div", null,
-        e(AdminToggleField, {
-          label: "Send notification email when ready",
-          hint:  "Sends each member an email when their personal Wrapped is ready to view.",
-          value: s.send_notification_email,
-          onChange: v => setSetting("send_notification_email", v),
-        })
       )
     );
   }
@@ -2746,10 +2564,71 @@
   });
 
   // ── Admin panel ───────────────────────────────────────────────────────────
+  // Generation tab: fully custom — action buttons, live status, schedule
+  //   fields, and intro message editor. Owns its own settings state and
+  //   wires the topbar Save button directly.
+  // Visibility / Content / Notifications tabs: SimpleSettingsPanel instances,
+  //   each scoped to their own field list. The server merges patches so tabs
+  //   can save independently without clobbering each other's keys.
   NE.registerAdminPanel("wrapped", {
     label:     "Wrapped",
     icon:      "fa-wand-sparkles",
-    component: WrappedAdminPanel,
+    component: function WrappedAdminPanel() {
+      const { TabbedPanel, SimpleSettingsPanel } = window.NexusExtensionTemplates;
+      return e(TabbedPanel, {
+        tabs: [
+          {
+            key:    "generation",
+            label:  "Generation",
+            icon:   "fa-wand-magic-sparkles",
+            render: () => e(GenerationTab),
+          },
+          {
+            key:    "visibility",
+            label:  "Visibility",
+            icon:   "fa-eye",
+            render: () => e(SimpleSettingsPanel, {
+              slug:   "wrapped",
+              fields: [
+                { key: "enabled",             label: "Enable Wrapped",           type: "boolean" },
+                { key: "sharing_default",     label: "Share by default",         type: "boolean" },
+                { key: "min_posts_threshold", label: "Minimum posts to qualify", type: "number",
+                  hint: "Users with fewer posts than this threshold are skipped during generation." },
+              ],
+            }),
+          },
+          {
+            key:    "content",
+            label:  "Content",
+            icon:   "fa-layer-group",
+            render: () => e(SimpleSettingsPanel, {
+              slug:   "wrapped",
+              fields: [
+                { key: "forum_name_override",  label: "Forum name override",  type: "string",
+                  hint: "Overrides the site name used in banners and messages. Leave blank to use the name from General settings.",
+                  placeholder: "e.g. Nexus Forum" },
+                { key: "show_gamepedia_slide", label: "Show Gamepedia slide", type: "boolean",
+                  hint: "Includes a slide showing the user's top games if they have Gamepedia activity." },
+                { key: "show_dms_slide",       label: "Show DMs slide",       type: "boolean",
+                  hint: "Includes a slide with direct message stats." },
+              ],
+            }),
+          },
+          {
+            key:    "notifications",
+            label:  "Notifications",
+            icon:   "fa-bell",
+            render: () => e(SimpleSettingsPanel, {
+              slug:   "wrapped",
+              fields: [
+                { key: "send_notification_email", label: "Send notification email when ready", type: "boolean",
+                  hint: "Sends each member an email when their personal Wrapped is ready to view." },
+              ],
+            }),
+          },
+        ],
+      });
+    },
   });
 
   // ── Explore item ──────────────────────────────────────────────────────────
