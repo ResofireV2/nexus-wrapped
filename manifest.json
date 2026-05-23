@@ -1,33 +1,107 @@
 {
-  "slug":          "wrapped",
-  "name":          "Wrapped",
-  "version":       "1.0.0",
-  "description":   "A personalised year-in-review for every member of your community.",
-  "author":        "billyrayfoss",
-  "homepage":      "https://github.com/ResofireV2/nexus-wrapped",
-  "logo_url":      "/ext/wrapped/assets/logo.webp",
-  "banner_url":    "/ext/wrapped/assets/banner.webp",
-  "js_bundle_url": "/ext/wrapped/assets/wrapped.js",
-  "categories":    ["community", "analytics"],
+  "manifest_version": 2,
+  "name":        "Wrapped",
+  "slug":        "wrapped",
+  "version":     "1.0.0",
+  "module":      "NexusWrapped",
+  "description": "A personalised year-in-review for every member of your community.",
+  "author":      "billyrayfoss",
+  "homepage":    "https://github.com/billyrayfoss/nexus-wrapped",
+  "logo_url":    "/ext/wrapped/assets/logo.webp",
+  "banner_url":  "/ext/wrapped/assets/banner.webp",
+  "js_bundle":   "wrapped.js",
+
   "settings_schema": {
-    "enabled":               { "type": "boolean", "label": "Enable Wrapped",                          "default": true },
-    "sharing_default":       { "type": "boolean", "label": "Share by default",                        "default": false },
-    "min_posts_threshold":   { "type": "number",  "label": "Minimum posts to qualify",               "default": 5 },
-    "show_gamepedia_slide":  { "type": "boolean", "label": "Show Gamepedia slide",                    "default": true },
-    "show_dms_slide":        { "type": "boolean", "label": "Show DMs slide",                          "default": true },
-    "forum_name_override":   { "type": "string",  "label": "Forum name override",                     "default": "" },
-    "send_notification_email": { "type": "boolean", "label": "Send notification email when ready",    "default": true },
-    "widget_hide_after":     { "type": "string",  "label": "Hide community widget after (YYYY-MM-DD)","default": "" },
-    "community_post_space_id": { "type": "number", "label": "Community post space ID",                "default": null },
-    "auto_generate_date":    { "type": "string",  "label": "Auto-generate date (YYYY-MM-DD)",         "default": "" },
-    "auto_generate_time":    { "type": "string",  "label": "Auto-generate time (HH:MM)",              "default": "09:00" },
-    "auto_generate_timezone": { "type": "string", "label": "Auto-generate timezone",                  "default": "UTC" },
-    "intro_message":         { "type": "string",  "label": "Intro message template",                  "default": "" }
+    "enabled":                 { "type": "boolean", "label": "Enable Wrapped",                             "default": true },
+    "sharing_default":         { "type": "boolean", "label": "Share by default",                           "default": false },
+    "min_posts_threshold":     { "type": "number",  "label": "Minimum posts to qualify",                   "default": 5 },
+    "show_gamepedia_slide":    { "type": "boolean", "label": "Show Gamepedia slide",                       "default": true },
+    "show_dms_slide":          { "type": "boolean", "label": "Show DMs slide",                             "default": true },
+    "forum_name_override":     { "type": "string",  "label": "Forum name override",                        "default": "" },
+    "send_notification_email": { "type": "boolean", "label": "Send notification email when ready",         "default": true },
+    "widget_hide_after":       { "type": "string",  "label": "Hide community widget after (YYYY-MM-DD)",   "default": "" },
+    "community_post_space_id": { "type": "number",  "label": "Community post space ID",                    "default": null },
+    "auto_generate_date":      { "type": "string",  "label": "Auto-generate date (YYYY-MM-DD)",            "default": "" },
+    "auto_generate_time":      { "type": "string",  "label": "Auto-generate time (HH:MM)",                 "default": "09:00" },
+    "auto_generate_timezone":  { "type": "string",  "label": "Auto-generate timezone",                     "default": "UTC" },
+    "intro_message":           { "type": "text",    "label": "Intro message template",                     "default": "" }
   },
   "settings_tabs": [
-    { "key": "generation",    "label": "Generation",    "icon": "fa-wand-magic-sparkles", "fields": ["widget_hide_after", "community_post_space_id"] },
-    { "key": "visibility",    "label": "Visibility",    "icon": "fa-eye",                 "fields": ["enabled", "sharing_default", "min_posts_threshold"] },
-    { "key": "content",       "label": "Content",       "icon": "fa-layer-group",         "fields": ["forum_name_override", "show_gamepedia_slide", "show_dms_slide"] },
-    { "key": "notifications", "label": "Notifications", "icon": "fa-bell",                "fields": ["send_notification_email"] }
+    {
+      "key":    "generation",
+      "label":  "Generation",
+      "icon":   "fa-wand-magic-sparkles",
+      "fields": ["auto_generate_date", "auto_generate_time", "auto_generate_timezone", "widget_hide_after", "community_post_space_id"]
+    },
+    {
+      "key":    "visibility",
+      "label":  "Visibility",
+      "icon":   "fa-eye",
+      "fields": ["enabled", "sharing_default", "min_posts_threshold"]
+    },
+    {
+      "key":    "content",
+      "label":  "Content",
+      "icon":   "fa-layer-group",
+      "fields": ["forum_name_override", "show_gamepedia_slide", "show_dms_slide", "intro_message"]
+    },
+    {
+      "key":    "notifications",
+      "label":  "Notifications",
+      "icon":   "fa-bell",
+      "fields": ["send_notification_email"]
+    }
+  ],
+
+  "notification_types": [
+    {
+      "key":         "wrapped_ready",
+      "label":       "Your Wrapped is ready",
+      "description": "Sent when your personal year-in-review has been generated.",
+      "icon":        "fa-wand-sparkles",
+      "channels":    ["web", "email"],
+      "default_preferences": { "web": true, "email": true },
+      "payload_schema": {
+        "year":     "The year the Wrapped covers",
+        "username": "The username the Wrapped was generated for"
+      }
+    }
+  ],
+
+  "routes": [
+    { "path": "/",                 "title": "Wrapped" },
+    { "path": "/community",        "title": "Community Wrapped" },
+    { "path": "/community/:year",  "title": "Community Wrapped" },
+    { "path": "/:year/:username",  "title": "Wrapped" }
+  ],
+
+  "profile_tabs": [
+    {
+      "id":         "wrapped",
+      "label":      "Wrapped",
+      "icon":       "fa-wand-sparkles",
+      "visibility": "always",
+      "priority":   50
+    }
+  ],
+
+  "admin_panel": {
+    "label": "Wrapped",
+    "icon":  "fa-wand-sparkles"
+  },
+
+  "explore": {
+    "label": "Wrapped",
+    "icon":  "fa-wand-sparkles",
+    "path":  "/"
+  },
+
+  "right_widgets": [
+    {
+      "id":       "wrapped-community",
+      "label":    "Community Wrapped",
+      "scope":    "global",
+      "priority": 15
+    }
   ]
 }

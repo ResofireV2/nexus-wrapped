@@ -51,49 +51,13 @@ defmodule NexusWrapped.AdminController do
       {:ok, result} ->
         share = Repo.get_by(NexusWrapped.Share, user_id: admin.id, year: year)
 
-        # For simulate, bypass Oban entirely — insert and broadcast directly.
-        # notify_extension enqueues an Oban job with unique: [period: 30],
-        # so repeated simulates within 30s are silently deduped at the job level.
-        # Direct insert + PubSub broadcast guarantees the notification fires every time.
-        data = %{
-          "ext_type" => "wrapped_ready",
-          "year"     => year,
-          "username" => admin.username
-        }
-
-        case Nexus.Notifications.create_notification(%{
-          type:    "extension",
-          user_id: admin.id,
-          data:    data
-        }) do
-          {:ok, notif} ->
-            Phoenix.PubSub.broadcast(
-              Nexus.PubSub,
-              "notifications:#{admin.id}",
-              {:new_notification, %{
-                id:           notif.id,
-                type:         "extension",
-                read:         false,
-                data:         data,
-                group_count:  1,
-                group_actors: [],
-                inserted_at:  notif.inserted_at,
-                actor:        nil,
-                post_id:      nil,
-                reply_id:     nil,
-                message_id:   nil,
-              }}
-            )
-
-            unread = Nexus.Notifications.unread_count(admin.id)
-            Phoenix.PubSub.broadcast(
-              Nexus.PubSub,
-              "notifications:#{admin.id}",
-              {:unread_count, unread}
-            )
-
-          _ -> :ok
-        end
+        Nexus.Notifications.notify_extension(
+          "wrapped",
+          "wrapped_ready",
+          user_id:  admin.id,
+          actor_id: admin.id,
+          data: %{"year" => year, "username" => admin.username}
+        )
 
         json(conn, %{
           data: %{
@@ -165,10 +129,6 @@ defmodule NexusWrapped.AdminController do
     else
       data = NexusWrapped.Generator.generate_community(year, settings)
 
-      # Build the community Wrapped route URL
-      wrapped_url = "/ext/wrapped/community/#{year}"
-
-      # Plain markdown post — thank you message + link only
       body  = NexusWrapped.Generator.build_community_post_body(data, year)
       title = "#{year} Community Wrapped 🎉"
 
@@ -178,10 +138,8 @@ defmodule NexusWrapped.AdminController do
         []
       ) do
         {:ok, post} ->
-          # Pin globally — appears at the top of every space and the feed
           Nexus.Forum.pin_post(post, true, "global")
 
-          # Persist community result
           now = DateTime.utc_now() |> DateTime.truncate(:second)
           case Repo.get_by(NexusWrapped.CommunityResult, year: year) do
             nil ->
@@ -210,14 +168,14 @@ defmodule NexusWrapped.AdminController do
   # ── GET /admin/community_status — check if a community post exists ─────────
 
   def community_status(conn, params) do
-    year = parse_year(params["year"])
+    year   = parse_year(params["year"])
     result = Repo.get_by(NexusWrapped.CommunityResult, year: year)
 
     json(conn, %{
       data: %{
-        year:        year,
-        exists:      !is_nil(result),
-        post_id:     result && result.post_id,
+        year:         year,
+        exists:       !is_nil(result),
+        post_id:      result && result.post_id,
         generated_at: result && DateTime.to_iso8601(result.generated_at),
       }
     })
