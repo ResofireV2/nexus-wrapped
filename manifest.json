@@ -11,48 +11,6 @@
   "banner_url":  "/ext/wrapped/assets/banner.webp",
   "js_bundle":   "wrapped.js",
 
-  "settings_schema": {
-    "enabled":                 { "type": "boolean", "label": "Enable Wrapped",                             "default": true },
-    "sharing_default":         { "type": "boolean", "label": "Share by default",                           "default": false },
-    "min_posts_threshold":     { "type": "number",  "label": "Minimum posts to qualify",                   "default": 5 },
-    "show_gamepedia_slide":    { "type": "boolean", "label": "Show Gamepedia slide",                       "default": true },
-    "show_dms_slide":          { "type": "boolean", "label": "Show DMs slide",                             "default": true },
-    "forum_name_override":     { "type": "string",  "label": "Forum name override",                        "default": "" },
-    "send_notification_email": { "type": "boolean", "label": "Send notification email when ready",         "default": true },
-    "widget_hide_after":       { "type": "string",  "label": "Hide community widget after (YYYY-MM-DD)",   "default": "" },
-    "community_post_space_id": { "type": "number",  "label": "Community post space ID",                    "default": null },
-    "auto_generate_date":      { "type": "string",  "label": "Auto-generate date (YYYY-MM-DD)",            "default": "" },
-    "auto_generate_time":      { "type": "string",  "label": "Auto-generate time (HH:MM)",                 "default": "09:00" },
-    "auto_generate_timezone":  { "type": "string",  "label": "Auto-generate timezone",                     "default": "UTC" },
-    "intro_message":           { "type": "text",    "label": "Intro message template",                     "default": "" }
-  },
-  "settings_tabs": [
-    {
-      "key":    "generation",
-      "label":  "Generation",
-      "icon":   "fa-wand-magic-sparkles",
-      "fields": ["auto_generate_date", "auto_generate_time", "auto_generate_timezone", "widget_hide_after", "community_post_space_id"]
-    },
-    {
-      "key":    "visibility",
-      "label":  "Visibility",
-      "icon":   "fa-eye",
-      "fields": ["enabled", "sharing_default", "min_posts_threshold"]
-    },
-    {
-      "key":    "content",
-      "label":  "Content",
-      "icon":   "fa-layer-group",
-      "fields": ["forum_name_override", "show_gamepedia_slide", "show_dms_slide", "intro_message"]
-    },
-    {
-      "key":    "notifications",
-      "label":  "Notifications",
-      "icon":   "fa-bell",
-      "fields": ["send_notification_email"]
-    }
-  ],
-
   "notification_types": [
     {
       "key":         "wrapped_ready",
