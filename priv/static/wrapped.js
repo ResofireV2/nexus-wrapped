@@ -2750,13 +2750,12 @@
   }
 
   // ── Notification type ─────────────────────────────────────────────────────
-  // NotificationsPage calls getNotifType(n.type) for onClick — n.type is
-  // "extension" for all extension notifications. renderBody correctly does a
-  // second lookup on n.data?.ext_type, but onClick does not. So we register
-  // under "extension" and dispatch by ext_type ourselves. We also register
-  // under "wrapped_ready" so renderBody works for the secondary lookup path.
+  // NotificationsPage resolves extension notifications via:
+  //   resolveExtType(n) → getNotifType(n.data?.ext_type)   (when n.type === "extension")
+  // So registering under "wrapped_ready" handles both renderBody and onClick
+  // correctly — no secondary "extension" registration needed.
 
-  const _wrappedNotifHandler = {
+  NE.registerNotificationType("wrapped_ready", {
     icon:      "fa-wand-sparkles",
     iconColor: "var(--ac)",
     renderBody(n) {
@@ -2772,39 +2771,17 @@
         )
       );
     },
-    onClick({ n, navigate }) {
-      const year     = n.data?.year || new Date().getFullYear();
+    onClick({ n }) {
+      const year     = n.data?.year;
       const username = n.data?.username;
-      if (username) {
-        const match = NE.matchRoute(`/ext/wrapped/${year}/${username}`);
-        if (match && window._nexusNavigate) {
-          window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
-          return;
-        }
+      if (year && username) {
+        NE.navigate(`/ext/wrapped/${year}/${username}`);
+        return;
       }
       // Fallback: go to profile Wrapped tab
-      if (window._nexusNavigate && username) {
-        window._nexusNavigate("profile", { username, tab: "wrapped" });
+      if (username) {
+        NE.navigate(`/profile/${username}/wrapped`);
       }
-    },
-  };
-
-  // Register under the ext_type key (used by renderBody secondary lookup)
-  NE.registerNotificationType("wrapped_ready", _wrappedNotifHandler);
-
-  // Register under "extension" so handleClick's getNotifType(n.type) finds onClick.
-  // Dispatch by ext_type so we don't break other extensions' notifications.
-  NE.registerNotificationType("extension", {
-    icon:      "fa-bell",
-    iconColor: "var(--ac)",
-    renderBody(n) {
-      const sub = NE.getNotifType(n.data?.ext_type);
-      if (sub?.renderBody) return sub.renderBody(n);
-      return e("span", { style: { color: "var(--t3)" } }, n.data?.ext_type || "notification");
-    },
-    onClick({ n, navigate }) {
-      const sub = NE.getNotifType(n.data?.ext_type);
-      if (sub?.onClick) sub.onClick({ n, navigate });
     },
   });
 
