@@ -32,36 +32,6 @@
     }).then(r => r.json());
   }
 
-  // ── history.pushState patch ───────────────────────────────────────────────
-  // Required: the structured clone algorithm strips functions (React components)
-  // from navigation state. This patch sanitises the state object before it
-  // reaches the browser, preventing the infinite loading spinner on back/forward.
-
-  (function () {
-    const orig = window.history.pushState.bind(window.history);
-
-    function sanitize(obj) {
-      if (obj === null || typeof obj !== "object") return obj;
-      if (typeof obj === "function") return undefined;
-      if (Array.isArray(obj)) return obj.map(sanitize).filter(v => v !== undefined);
-      const out = {};
-      for (const k of Object.keys(obj)) {
-        const v = sanitize(obj[k]);
-        if (v !== undefined) out[k] = v;
-      }
-      return out;
-    }
-
-    window.history.pushState = function (state, title, url) {
-      try {
-        JSON.stringify(state);
-        return orig(state, title, url);
-      } catch (_) {
-        return orig(sanitize(state), title, url);
-      }
-    };
-  })();
-
   // ── Timezone list (mirrors Nexus Digest) ─────────────────────────────────
   const TIMEZONES = [
     { group: "UTC",          zones: ["UTC"] },
@@ -119,10 +89,7 @@
   // ── Navigation helper ─────────────────────────────────────────────────────
 
   function navToWrapped(year, username) {
-    const match = NE.matchRoute(`/ext/wrapped/${year}/${username}`);
-    if (window._nexusNavigate && match) {
-      window._nexusNavigate("ext-route", { _match: match, year: String(year), username });
-    }
+    NE.navigate(`/ext/wrapped/${year}/${username}`);
   }
 
   // =========================================================================
@@ -562,7 +529,7 @@
             style: { color: "var(--ac-text)", textDecoration: "none" },
             onClick: ev => {
               ev.preventDefault();
-              if (window._nexusNavigate) window._nexusNavigate("post", { id: communityResult.post_id });
+              NE.navigate(`/post/${communityResult.post_id}`);
             },
           }, "View post →")
         ),
@@ -810,12 +777,12 @@
   // Receives: { username, currentUser, navigate, userId, user_id }
   // Shows year cards with headline stats + link to full slide experience.
 
-  function WrappedProfileTab({ username, currentUser, navigate }) {
+  function WrappedProfileTab({ username, current_user }) {
     const [entries, setEntries] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error,   setError]   = useState(null);
 
-    const isOwn = currentUser && currentUser.username === username;
+    const isOwn = current_user && current_user.username === username;
 
     useEffect(() => {
       setLoading(true); setError(null); setEntries(null);
@@ -876,7 +843,6 @@
         key:         entry.year,
         entry,
         isOwn,
-        navigate,
         username,
       }))
     );
@@ -894,7 +860,7 @@
     };
   }
 
-  function WrappedYearCard({ entry, isOwn, navigate, username }) {
+  function WrappedYearCard({ entry, isOwn, username }) {
     const [shareLoading, setShareLoading] = useState(false);
     const [isShared,     setIsShared]     = useState(entry.is_shared || false);
 
@@ -1674,7 +1640,7 @@
         style: { display: "flex", gap: 10, marginTop: 32, animationDelay: "0.55s" },
       },
         e("button", {
-          onClick: () => navigate("profile", { username, tab: "wrapped" }),
+          onClick: () => NE.navigate(`/profile/${username}/wrapped`),
           style: {
             padding: "10px 22px", borderRadius: 24,
             background: "var(--ac)", border: "none",
@@ -1834,7 +1800,7 @@
         e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 28, color: "var(--amber)" } }),
         e("div", { style: { fontSize: 15, color: "var(--t2)" } }, msgs[state.code] || "Something went wrong."),
         e("button", {
-          onClick: () => navigate("profile", { username }),
+          onClick: () => NE.navigate(`/profile/${username}`),
           style: { fontSize: 13, padding: "7px 18px", borderRadius: 8, background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)", cursor: "pointer", fontFamily: "inherit", marginTop: 8 },
         }, `Back to ${username}'s profile`)
       );
@@ -2073,10 +2039,7 @@
     function pad(n) { return String(n).padStart(2, "0"); }
 
     function handleCta() {
-      const match = NE.matchRoute(`/ext/wrapped/community/${year}`);
-      if (window._nexusNavigate && match) {
-        window._nexusNavigate("ext-route", { _match: match, year: String(year) });
-      }
+      NE.navigate(`/ext/wrapped/community/${year}`);
     }
 
     const cd = getCountdown();
@@ -2502,7 +2465,7 @@
   }
 
   // ── Slide 6: Most discussed thread ───────────────────────────────────────
-  function CommSlideMostDiscussed({ d, navigate }) {
+  function CommSlideMostDiscussed({ d }) {
     const post = d.most_discussed;
 
     return e(Slide, null,
@@ -2517,7 +2480,7 @@
                 background: "var(--s2)", border: "0.5px solid var(--b1)",
                 borderRadius: 14, padding: "20px 22px", cursor: "pointer",
               },
-              onClick: () => navigate("post", { id: post.id }),
+              onClick: () => NE.navigate(`/post/${post.id}`),
             },
               e("div", { style: { fontSize: 16, fontWeight: 600, color: "var(--t1)", lineHeight: 1.4, marginBottom: 10 } },
                 post.title
@@ -2544,7 +2507,7 @@
   }
 
   // ── Slide 7: Most loved post ──────────────────────────────────────────────
-  function CommSlideMostLoved({ d, navigate }) {
+  function CommSlideMostLoved({ d }) {
     const post = d.most_loved_post;
 
     return e(Slide, null,
@@ -2564,7 +2527,7 @@
                 borderRadius: 14, padding: "16px 20px", marginTop: 20,
                 maxWidth: 360, cursor: "pointer",
               },
-              onClick: () => navigate("post", { id: post.id }),
+              onClick: () => NE.navigate(`/post/${post.id}`),
             },
               e("div", { style: { fontSize: 14, fontWeight: 500, color: "var(--t1)", lineHeight: 1.4, marginBottom: 8 } },
                 post.title
@@ -2582,7 +2545,7 @@
   }
 
   // ── Slide 8: Outro ────────────────────────────────────────────────────────
-  function CommSlideOutro({ d, year, currentUser, navigate }) {
+  function CommSlideOutro({ d, year, currentUser }) {
     return e(Slide, null,
       e(ConfettiBurst, { active: true }),
       e("div", { className: "wr-fade-in", style: { fontSize: 11, letterSpacing: 2, color: "var(--t4)", marginBottom: 20, textTransform: "uppercase", animationDelay: "0.05s" } },
@@ -2598,7 +2561,7 @@
                 "Now see your own personal Wrapped."
               ),
               e("button", {
-                onClick: () => navigate("profile", { username: currentUser.username, tab: "wrapped" }),
+                onClick: () => NE.navigate(`/profile/${currentUser.username}/wrapped`),
                 style: {
                   padding: "10px 28px", borderRadius: 24,
                   background: "var(--ac)", border: "none",
@@ -2650,7 +2613,7 @@
         e("i", { className: "fa-solid fa-triangle-exclamation", style: { fontSize: 28, color: "var(--amber)" } }),
         e("div", { style: { fontSize: 15, color: "var(--t2)" } }, msgs[state.code] || "Something went wrong."),
         e("button", {
-          onClick: () => navigate("feed"),
+          onClick: () => NE.navigate("/"),
           style: { fontSize: 13, padding: "7px 18px", borderRadius: 8, background: "none", border: "0.5px solid var(--b1)", color: "var(--t4)", cursor: "pointer", fontFamily: "inherit", marginTop: 8 },
         }, "Go to feed")
       );
@@ -2666,9 +2629,9 @@
       e(CommSlideReactionLeaders,{ key: `c3-${key}`, d }),
       e(CommSlideTopSpace,       { key: `c4-${key}`, d }),
       e(CommSlideTopTags,        { key: `c5-${key}`, d }),
-      e(CommSlideMostDiscussed,  { key: `c6-${key}`, d, navigate }),
-      e(CommSlideMostLoved,      { key: `c7-${key}`, d, navigate }),
-      e(CommSlideOutro,          { key: `c8-${key}`, d, year, currentUser, navigate }),
+      e(CommSlideMostDiscussed,  { key: `c6-${key}`, d }),
+      e(CommSlideMostLoved,      { key: `c7-${key}`, d }),
+      e(CommSlideOutro,          { key: `c8-${key}`, d, year, currentUser }),
     ];
 
     const onPrevNav = () => { onPrev(); setKey(k => k + 1); };
@@ -2689,13 +2652,10 @@
   }
 
   // ── Community landing redirect ────────────────────────────────────────────
-  function WrappedCommunityLandingPage({ currentUser, navigate }) {
+  function WrappedCommunityLandingPage({ currentUser }) {
     useEffect(() => {
       const year = new Date().getFullYear();
-      const match = NE.matchRoute(`/ext/wrapped/community/${year}`);
-      if (window._nexusNavigate && match) {
-        window._nexusNavigate("ext-route", { _match: match, year: String(year) });
-      }
+      NE.navigate(`/ext/wrapped/community/${year}`);
     }, []);
     return e("div", {
       style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" },
@@ -2708,10 +2668,10 @@
 
   // ── Landing page route ────────────────────────────────────────────────────
   // /wrapped — redirects to own profile Wrapped tab. Used by the explore item.
-  function WrappedLandingPage({ currentUser, navigate }) {
+  function WrappedLandingPage({ currentUser }) {
     useEffect(() => {
       if (currentUser && currentUser.username) {
-        navigate("profile", { username: currentUser.username, tab: "wrapped" });
+        NE.navigate(`/profile/${currentUser.username}/wrapped`);
       }
     }, []);
     return e("div", {
@@ -2720,31 +2680,31 @@
   }
 
   // ── Routes ────────────────────────────────────────────────────────────────
-  NE.registerRoute("/ext/wrapped",                        WrappedLandingPage,          { title: "Wrapped" });
-  NE.registerRoute("/ext/wrapped/community",              WrappedCommunityLandingPage, { title: "Community Wrapped" });
-  NE.registerRoute("/ext/wrapped/community/:year",        WrappedCommunityPage,        { title: "Community Wrapped" });
-  NE.registerRoute("/ext/wrapped/:year/:username",        WrappedPage,                 { title: "Wrapped" });
+  NE.registerRoute("wrapped", "/",                WrappedLandingPage,          { title: "Wrapped" });
+  NE.registerRoute("wrapped", "/community",       WrappedCommunityLandingPage, { title: "Community Wrapped" });
+  NE.registerRoute("wrapped", "/community/:year", WrappedCommunityPage,        { title: "Community Wrapped" });
+  NE.registerRoute("wrapped", "/:year/:username", WrappedPage,                 { title: "Wrapped" });
 
   // ── Profile tab ───────────────────────────────────────────────────────────
-  WrappedProfileTab.tabId    = "wrapped";
-  WrappedProfileTab.tabLabel = "Wrapped";
-  NE.registerSlot("profile_tab", WrappedProfileTab, 50);
+  NE.registerProfileTab({
+    slug:      "wrapped",
+    id:        "wrapped",
+    component: WrappedProfileTab,
+  });
 
-  // ── Account action ────────────────────────────────────────────────────────
-  // "View My Wrapped" in the account dropdown — navigates to own profile Wrapped tab
   // ── Account action — only visible in January ──────────────────────────────
   // Wrapped is a once-a-year event. The dropdown entry only appears during
   // January when users are most likely to have a new Wrapped waiting.
   const _wrappedMonth = new Date().getMonth(); // 0 = January
   if (_wrappedMonth === 0) {
     NE.registerAccountAction({
-      id:    "wrapped-my-wrapped",
-      label: "My Wrapped",
-      icon:  "fa-wand-sparkles",
+      id:       "wrapped-my-wrapped",
+      label:    "My Wrapped",
+      icon:     "fa-wand-sparkles",
       priority: 80,
-      onClick({ currentUser, navigate, close }) {
+      onClick({ currentUser, close }) {
         close();
-        navigate("profile", { username: currentUser.username, tab: "wrapped" });
+        NE.navigate(`/profile/${currentUser.username}/wrapped`);
       },
     });
   }
@@ -2792,15 +2752,24 @@
     component: WrappedAdminPanel,
   });
 
+  // ── Explore item ──────────────────────────────────────────────────────────
+  NE.registerExploreItem({
+    slug:  "wrapped",
+    path:  "/",
+    label: "Wrapped",
+    icon:  "fa-wand-sparkles",
+  });
+
   // ── Community sidebar widget ──────────────────────────────────────────────
-  // pages: "global" — appears on every page, admin-configurable per-page in Layout.
+  // scope: "global" — appears on every page, admin-configurable per-page in Layout.
   // Self-hides if no community result exists or today > widget_hide_after.
   NE.registerRightWidget({
+    slug:      "wrapped",
     id:        "wrapped-community",
     label:     "Community Wrapped",
     component: WrappedCommunityWidget,
     priority:  15,
-    pages:     "global",
+    scope:     "global",
   });
 
 })();
