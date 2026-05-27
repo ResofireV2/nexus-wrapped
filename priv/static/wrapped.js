@@ -1863,8 +1863,10 @@
     const cd = getCountdown();
 
     const bannerStyle = {
-      width: "100%",
-      display: "block",
+      width:    "100%",
+      display:  "block",
+      borderRadius: "12px 12px 0 0",
+      overflow: "hidden",
     };
 
     const cdCellStyle = {
@@ -1922,7 +1924,7 @@
       <text x="340" y="164" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="13" letter-spacing="5" font-weight="600"><tspan fill="#a78bfa">W</tspan><tspan fill="#f472b6">R</tspan><tspan fill="#fbbf24">A</tspan><tspan fill="#34d399">P</tspan><tspan fill="#60a5fa">P</tspan><tspan fill="#a78bfa">E</tspan><tspan fill="#f472b6">D</tspan></text>
     </svg>`;
 
-    return e("div", { style: { borderRadius: 12, border: "0.5px solid rgba(255,255,255,0.08)", background: "#08080f", overflow: "hidden" } },
+    return e("div", { style: { borderRadius: 12, border: "0.5px solid rgba(255,255,255,0.08)", background: "#08080f" } },
 
       // Banner — inline SVG as HTML
       e("div", {
