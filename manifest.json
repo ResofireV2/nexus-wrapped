@@ -48,11 +48,6 @@
     "icon":  "fa-wand-sparkles"
   },
 
-  "explore": {
-    "label": "Wrapped",
-    "icon":  "fa-wand-sparkles",
-    "path":  "/"
-  },
 
   "right_widgets": [
     {

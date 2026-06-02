@@ -2482,7 +2482,7 @@
   // =========================================================================
 
   // ── Landing page route ────────────────────────────────────────────────────
-  // /wrapped — redirects to own profile Wrapped tab. Used by the explore item.
+  // /wrapped — redirects to own profile Wrapped tab.
   function WrappedLandingPage({ currentUser }) {
     useEffect(() => {
       if (currentUser && currentUser.username) {
@@ -2626,14 +2626,6 @@
         ],
       });
     },
-  });
-
-  // ── Explore item ──────────────────────────────────────────────────────────
-  NE.registerExploreItem({
-    slug:  "wrapped",
-    path:  "/",
-    label: "Wrapped",
-    icon:  "fa-wand-sparkles",
   });
 
   // ── Community sidebar widget ──────────────────────────────────────────────
