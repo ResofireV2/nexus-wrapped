@@ -4,9 +4,9 @@ defmodule NexusWrapped do
   @impl true
   def migrations do
     [
-      NexusWrapped.Migrations.V20260515000001CreateResults,
-      NexusWrapped.Migrations.V20260515000002CreateShares,
-      NexusWrapped.Migrations.V20260516000001CreateCommunityResults,
+      NexusWrapped.Migrations.V1CreateResults,
+      NexusWrapped.Migrations.V2CreateShares,
+      NexusWrapped.Migrations.V3CreateCommunityResults,
     ]
   end
 
