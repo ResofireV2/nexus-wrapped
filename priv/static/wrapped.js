@@ -1588,8 +1588,9 @@
     useEffect(() => {
       apiFetch(`/${year}/${encodeURIComponent(username)}`)
         .then(d => {
-          if (d.data) setState({ status: "ready", data: d.data });
-          else setState({ status: "error", code: d.error || "unknown" });
+          if (d.data)                            setState({ status: "ready", data: d.data });
+          else if (d.status === "not_generated") setState({ status: "error", code: "not_generated" });
+          else                                   setState({ status: "error", code: d.error || "unknown" });
         })
         .catch(() => setState({ status: "error", code: "network_error" }));
     }, [year, username]);
@@ -2401,8 +2402,9 @@
     useEffect(() => {
       apiFetch(`/community/${year}`)
         .then(d => {
-          if (d.data) setState({ status: "ready", data: d.data });
-          else setState({ status: "error", code: d.error || "unknown" });
+          if (d.data)                        setState({ status: "ready", data: d.data });
+          else if (d.status === "not_generated") setState({ status: "error", code: "not_generated" });
+          else                               setState({ status: "error", code: d.error || "unknown" });
         })
         .catch(() => setState({ status: "error", code: "network_error" }));
     }, [year]);

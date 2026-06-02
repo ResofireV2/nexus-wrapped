@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name":        "Wrapped",
   "slug":        "wrapped",
-  "version":     "1.0.1",
+  "version":     "1.0.2",
   "module":      "NexusWrapped",
   "description": "A personalised year-in-review for every member of your community.",
   "author":      "billyrayfoss",

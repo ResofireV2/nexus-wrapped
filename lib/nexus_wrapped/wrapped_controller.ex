@@ -59,7 +59,7 @@ defmodule NexusWrapped.WrappedController do
 
       cond do
         is_nil(result) ->
-          conn |> put_status(404) |> json(%{error: "not_generated"})
+          json(conn, %{status: "not_generated"})
 
         not is_owner and not is_shared ->
           conn |> put_status(403) |> json(%{error: "private"})
@@ -119,7 +119,7 @@ defmodule NexusWrapped.WrappedController do
     result = Repo.get_by(NexusWrapped.CommunityResult, year: year)
 
     if is_nil(result) do
-      conn |> put_status(404) |> json(%{error: "not_generated"})
+      json(conn, %{status: "not_generated"})
     else
       ext      = Nexus.Extensions.get_extension_by_slug("wrapped")
       settings = if ext, do: ext.settings || %{}, else: %{}
