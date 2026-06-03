@@ -479,8 +479,8 @@
               style: {
                 display: "inline-flex", alignItems: "center", gap: 6,
                 padding: "3px 10px", borderRadius: 20, fontSize: 12,
-                background: "rgba(167,139,250,0.1)",
-                border: "0.5px solid rgba(167,139,250,0.3)",
+                background: "var(--ac-bg)",
+                border: "0.5px solid var(--ac-border)",
                 color: "var(--ac-text)", cursor: "default",
                 fontFamily: "monospace",
               },
@@ -762,9 +762,9 @@
             key: m,
             style: {
               fontSize: 10, padding: "3px 9px", borderRadius: 20,
-              background: "rgba(167,139,250,0.1)",
-              border: "0.5px solid rgba(167,139,250,0.25)",
-              color: "#c4b5fd",
+              background: "var(--ac-bg)",
+              border: "0.5px solid var(--ac-border)",
+              color: "var(--ac-text)",
             },
           }, m.replace(/_/g, " "))
         )
@@ -1872,15 +1872,15 @@
 
     const cdCellStyle = {
       borderRadius: 8, padding: "6px 4px", textAlign: "center",
-      background: "rgba(167,139,250,0.10)",
-      border: "0.5px solid rgba(167,139,250,0.25)",
+      background: "var(--ac-bg)",
+      border: "0.5px solid var(--ac-border)",
     };
 
     const ctaStyle = {
       display: "block", width: "100%", padding: "9px 0",
       borderRadius: 8, fontSize: 13, fontWeight: 500,
       textAlign: "center", cursor: "pointer", border: "none",
-      background: "#a78bfa", color: "#0d0d14",
+      background: "var(--ac)", color: "var(--ac-on)",
       fontFamily: "inherit",
     };
 
@@ -1946,7 +1946,7 @@
           e("div", { style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginBottom: 6 } },
             [{ v: pad(cd.d), l: "days" }, { v: pad(cd.h), l: "hrs" }, { v: pad(cd.m), l: "min" }, { v: pad(cd.s), l: "sec" }]
               .map(seg => e("div", { key: seg.l, style: cdCellStyle },
-                e("div", { style: { fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1, marginBottom: 2, color: "#a78bfa" } }, seg.v),
+                e("div", { style: { fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1, marginBottom: 2, color: "var(--ac)" } }, seg.v),
                 e("div", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", color: "rgba(167,139,250,0.55)" } }, seg.l)
               ))
           ),
